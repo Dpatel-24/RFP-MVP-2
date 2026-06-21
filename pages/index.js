@@ -1,58 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SEED DATA
-// ─────────────────────────────────────────────────────────────────────────────
-const TIMER_SECONDS = 600;
-const COUNTER_TIMER = 300;
-
-const HOTELS_DB = [
-  {
-    id: "h1",
-    name: "The Maison Slidell",
-    location: "Slidell, Louisiana",
-    city: "New Orleans Area",
-    tagline: "Historic boutique on the Northshore",
-    rating: 4.7,
-    reviewCount: 89,
-    rooms: [
-      { id: "101", name: "King Suite",       type: "King · Suite",         sqft: 480, floor: 3, rack: 189, amenities: ["City view","Soaking tub","Nespresso"],  image: "suite",    floor_price: 85 },
-      { id: "204", name: "Queen Deluxe",     type: "Queen · Deluxe",       sqft: 320, floor: 2, rack: 139, amenities: ["Garden view","Work desk","Rain shower"],image: "deluxe",   floor_price: 65 },
-      { id: "307", name: "Double Standard",  type: "Two Queens · Standard", sqft: 280, floor: 1, rack: 109, amenities: ["Pool view","Sleeps 4"],                 image: "standard", floor_price: 50 },
-    ],
-  },
-  {
-    id: "h2",
-    name: "Canal Street Lofts",
-    location: "New Orleans, Louisiana",
-    city: "New Orleans Area",
-    tagline: "Industrial-chic lofts in the French Quarter",
-    rating: 4.5,
-    reviewCount: 134,
-    rooms: [
-      { id: "L1", name: "Loft Studio",    type: "King · Loft",         sqft: 400, floor: 4, rack: 210, amenities: ["Balcony","Exposed brick","Kitchenette"], image: "suite",  floor_price: 95 },
-      { id: "L2", name: "Courtyard Room", type: "Queen · Standard",    sqft: 260, floor: 2, rack: 149, amenities: ["Courtyard view","Clawfoot tub"],        image: "deluxe", floor_price: 70 },
-    ],
-  },
-  {
-    id: "h3",
-    name: "Audubon Garden Inn",
-    location: "Uptown, New Orleans",
-    city: "New Orleans Area",
-    tagline: "Quiet retreat near Audubon Park",
-    rating: 4.8,
-    reviewCount: 56,
-    rooms: [
-      { id: "A1", name: "Garden King", type: "King · Garden View", sqft: 350, floor: 1, rack: 175, amenities: ["Garden view","Hammock","Fireplace"], image: "deluxe", floor_price: 80 },
-    ],
-  },
-];
-
-const SEED_GUESTS = [
-  { email: "marcus@example.com", name: "Marcus Webb", rating: 4.9, stays: 12, reviews: 11, memberSince: "2022", verified: true },
-  { email: "sara@example.com",   name: "Sara Chen",   rating: 4.6, stays: 5,  reviews: 4,  memberSince: "2023", verified: true },
-];
+import * as api from "../lib/api";
+import { TIMER_SECONDS, COUNTER_TIMER, effectiveStatus, secondsLeft } from "../lib/api";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -62,7 +11,6 @@ function fmt(secs) {
   const s = secs % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
-function genId() { return Math.random().toString(36).slice(2, 8).toUpperCase(); }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED COMPONENTS
@@ -115,6 +63,7 @@ function Badge({ status }) {
     pending:   { label:"Awaiting Response", color:"#F59E0B", bg:"#451A03" },
     countered: { label:"Counter Offered",   color:"#A78BFA", bg:"#2E1065" },
     accepted:  { label:"Accepted",          color:"#22C55E", bg:"#052E16" },
+    handled:   { label:"Confirmed",         color:"#22C55E", bg:"#052E16" },
     declined:  { label:"Declined",          color:"#EF4444", bg:"#3B0000" },
     expired:   { label:"Expired",           color:"#64748B", bg:"#1E293B" },
   };
@@ -143,7 +92,7 @@ function GuestProfileCard({ guest, compact = false }) {
     <div style={{ background:"#0A0F1E", border:"1px solid #1E293B", borderRadius:10, padding: compact ? "12px 14px" : "16px 18px" }}>
       <div style={{ display:"flex", alignItems:"center", gap:12 }}>
         <div style={{ width:compact?36:44, height:compact?36:44, borderRadius:"50%", background:"#1E3A5F", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:compact?14:18, color:"#F59E0B", flexShrink:0 }}>
-          {guest.name.split(" ").map(n=>n[0]).join("")}
+          {(guest.name || "?").split(" ").map(n=>n[0]).join("")}
         </div>
         <div style={{ flex:1 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -171,6 +120,72 @@ function GuestProfileCard({ guest, compact = false }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EMAIL OTP LOGIN (shared by guest + hotel)
+// ─────────────────────────────────────────────────────────────────────────────
+function OtpLogin({ title, eyebrow, blurb, onSignedIn }) {
+  const [step, setStep]   = useState("email");
+  const [email, setEmail] = useState("");
+  const [code, setCode]   = useState("");
+  const [busy, setBusy]   = useState(false);
+  const [msg, setMsg]     = useState(null);
+
+  async function send() {
+    if (!email) return;
+    setBusy(true); setMsg(null);
+    const { error } = await api.sendOtp(email.trim());
+    setBusy(false);
+    if (error) { setMsg(error.message); return; }
+    setStep("code");
+  }
+
+  async function verify() {
+    if (!code) return;
+    setBusy(true); setMsg(null);
+    const { data, error } = await api.verifyOtp(email.trim(), code.trim());
+    setBusy(false);
+    if (error) { setMsg(error.message); return; }
+    onSignedIn(data.user, email.trim());
+  }
+
+  return (
+    <div>
+      <div style={S.heroBox}>
+        <div style={S.heroEyebrow}>{eyebrow}</div>
+        <h2 style={{ ...S.heroTitle, fontSize:24 }}>{title}</h2>
+        <p style={S.heroSub}>{blurb}</p>
+      </div>
+      <div style={S.formCard}>
+        {step === "email" ? (
+          <>
+            <input style={S.field} placeholder="Email address" type="email" value={email}
+              onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} />
+            <button style={{ ...S.submitBtn, marginTop:14, opacity:(!email||busy)?0.4:1 }} disabled={!email||busy} onClick={send}>
+              {busy ? "Sending…" : "Send Login Code"}
+            </button>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize:13, color:"#94A3B8", marginBottom:12 }}>
+              We sent a 6-digit code to <strong style={{color:"#F7F5F0"}}>{email}</strong>.
+            </div>
+            <input style={{ ...S.field, fontFamily:"Space Grotesk,sans-serif", fontSize:20, letterSpacing:"0.3em", textAlign:"center" }}
+              placeholder="••••••" inputMode="numeric" value={code}
+              onChange={e=>setCode(e.target.value)} onKeyDown={e=>e.key==="Enter"&&verify()} />
+            <button style={{ ...S.submitBtn, marginTop:14, opacity:(!code||busy)?0.4:1 }} disabled={!code||busy} onClick={verify}>
+              {busy ? "Verifying…" : "Verify & Continue"}
+            </button>
+            <button style={{ ...S.ghostBtn, marginTop:10, width:"100%", textAlign:"center" }} onClick={()=>{setStep("email");setCode("");setMsg(null);}}>
+              Use a different email
+            </button>
+          </>
+        )}
+        {msg && <div style={{ marginTop:12, fontSize:13, color:"#EF4444" }}>{msg}</div>}
+      </div>
     </div>
   );
 }
@@ -227,9 +242,11 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // GUEST VIEW  (sidebar layout)
 // ─────────────────────────────────────────────────────────────────────────────
-function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel }) {
+function GuestView() {
   const [screen, setScreen]               = useState("listing");
   const [sideTab, setSideTab]             = useState("browse");
+  const [hotels, setHotels]               = useState([]);
+  const [bids, setBids]                   = useState([]);
   const [selectedHotel, setSelectedHotel] = useState(null);
   const [selectedRoom, setSelectedRoom]   = useState(null);
   const [bidAmount, setBidAmount]         = useState("");
@@ -237,19 +254,40 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
   const [timeLeft, setTimeLeft]           = useState(TIMER_SECONDS);
   const [counterTimeLeft, setCTL]         = useState(COUNTER_TIMER);
   const [currentGuest, setCurrentGuest]   = useState(null);
-  const [loginEmail, setLoginEmail]       = useState("");
-  const [loginName, setLoginName]         = useState("");
-  const [ratingVal, setRatingVal]         = useState(0);
-  const [ratingNote, setRatingNote]       = useState("");
   const [counterToast, setCounterToast]   = useState(false);
+  const [submitting, setSubmitting]       = useState(false);
   const timerRef = useRef(null);
 
-  const hotelsWithRooms = HOTELS_DB.filter(h => h.rooms.length > 0);
-  const myBids     = currentGuest ? bids.filter(b => b.guest?.email === currentGuest.email) : [];
-  const myLive     = myBids.filter(b => b.status === "pending" || b.status === "countered");
-  const myHistory  = myBids.filter(b => b.status !== "pending" && b.status !== "countered");
+  const myBids    = bids;
+  const myLive    = myBids.filter(b => ["pending","countered"].includes(effectiveStatus(b)));
+  const myHistory = myBids.filter(b => !["pending","countered"].includes(effectiveStatus(b)));
 
-  // ── Watch for status changes on active bid (NO screen guard) ──────────────
+  const refreshBids = useCallback(async (guest) => {
+    const g = guest || currentGuest;
+    if (!g) return;
+    try { setBids(await api.getMyRequests(g.id, g)); } catch (e) { console.error(e); }
+  }, [currentGuest]);
+
+  // ── Load hotels once ──────────────────────────────────────────────────────
+  useEffect(() => { api.getHotelsWithRooms().then(setHotels).catch(console.error); }, []);
+
+  // ── Restore session + subscribe to my requests ────────────────────────────
+  useEffect(() => {
+    let unsub = null;
+    async function boot(session) {
+      if (!session) { setCurrentGuest(null); setBids([]); return; }
+      const profile = await api.ensureGuestProfile(session.user, session.user.email?.split("@")[0]);
+      setCurrentGuest(profile);
+      refreshBids(profile);
+      if (unsub) unsub();
+      unsub = api.subscribeRequests("guest_id", session.user.id, () => refreshBids(profile));
+    }
+    api.getSession().then(boot);
+    const { data: sub } = api.onAuthChange(boot);
+    return () => { if (unsub) unsub(); sub?.subscription?.unsubscribe(); };
+  }, [refreshBids]);
+
+  // ── Watch for status changes on the active bid ─────────────────────────────
   useEffect(() => {
     if (!activeBid) return;
     const current = bids.find(b => b.id === activeBid.id);
@@ -258,92 +296,77 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
     setActiveBid(current);
     clearInterval(timerRef.current);
     if (current.status === "countered") {
-      setCTL(COUNTER_TIMER);
+      setCTL(secondsLeft(current));
       setCounterToast(true);
       setTimeout(() => setCounterToast(false), 6000);
       setScreen("counter");
     } else {
       setScreen("result");
     }
-  }, [bids]);
+  }, [bids]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Main countdown ────────────────────────────────────────────────────────
+  // ── Countdown driven by expires_at ─────────────────────────────────────────
   useEffect(() => {
-    if (screen !== "waiting") return;
-    timerRef.current = setInterval(() => {
-      setTimeLeft(t => {
-        if (t <= 1) { clearInterval(timerRef.current); setActiveBid(p => ({...p, status:"expired"})); setScreen("result"); return 0; }
-        return t - 1;
-      });
-    }, 1000);
+    if (screen !== "waiting" && screen !== "counter") return;
+    const tick = () => {
+      const rem = secondsLeft(activeBid);
+      if (screen === "waiting") setTimeLeft(rem); else setCTL(rem);
+      if (rem <= 0) {
+        clearInterval(timerRef.current);
+        setActiveBid(p => p ? { ...p, status:"expired" } : p);
+        setScreen("result");
+      }
+    };
+    tick();
+    timerRef.current = setInterval(tick, 1000);
     return () => clearInterval(timerRef.current);
-  }, [screen]);
+  }, [screen, activeBid]);
 
-  // ── Counter countdown ─────────────────────────────────────────────────────
-  useEffect(() => {
-    if (screen !== "counter") return;
-    timerRef.current = setInterval(() => {
-      setCTL(t => {
-        if (t <= 1) { clearInterval(timerRef.current); setActiveBid(p => ({...p, status:"expired"})); setScreen("result"); return 0; }
-        return t - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timerRef.current);
-  }, [screen]);
-
-  function handleLogin() {
-    if (!loginEmail) return;
-    const existing = guestProfiles.find(g => g.email === loginEmail) || SEED_GUESTS.find(g => g.email === loginEmail);
-    if (existing) {
-      setCurrentGuest(existing);
-      onGuestAuth(existing);
-      setScreen("listing"); setSideTab("browse");
-    } else {
-      if (!loginName) return;
-      const ng = { email:loginEmail, name:loginName, rating:0, stays:0, reviews:0, memberSince:new Date().getFullYear().toString(), verified:false };
-      onGuestAuth(ng);
-      setCurrentGuest(ng);
-      setScreen("listing"); setSideTab("browse");
-    }
-  }
-
-  function handleBid() {
+  async function handleBid() {
     if (!currentGuest) { setScreen("login"); return; }
     const amount = parseInt(bidAmount);
     if (!amount || amount < 1) return;
-    const bid = { id:genId(), hotel:selectedHotel, room:selectedRoom, amount, guest:currentGuest, status:"pending", submittedAt:new Date().toISOString(), counterAmount:null };
-    onSubmitBid(bid);
-    setActiveBid(bid);
-    setTimeLeft(TIMER_SECONDS);
-    setScreen("waiting");
-    setSideTab("live");
+    setSubmitting(true);
+    try {
+      const bid = await api.submitBid({ hotelId: selectedHotel.id, roomId: selectedRoom.id, guestId: currentGuest.id, amount });
+      bid.hotel = { id: selectedHotel.id, name: selectedHotel.name };
+      bid.room  = { id: selectedRoom.id, name: selectedRoom.name, type: selectedRoom.type, rack: selectedRoom.rack };
+      setActiveBid(bid);
+      refreshBids();
+      if (bid.status === "declined") { setScreen("result"); }
+      else { setTimeLeft(secondsLeft(bid)); setScreen("waiting"); }
+      setSideTab("live");
+    } catch (e) { console.error(e); alert("Could not submit your request. Please try again."); }
+    finally { setSubmitting(false); }
   }
 
-  function handleAcceptCounter() {
-    const current = bids.find(b => b.id === activeBid?.id) || activeBid;
-    setActiveBid({ ...current, status:"accepted", amount:current.counterAmount });
+  async function handleAcceptCounter() {
+    try { await api.acceptCounter(activeBid.id); } catch (e) { console.error(e); }
+    refreshBids();
+    setActiveBid(p => ({ ...p, status:"accepted", amount: p.counterAmount }));
     setScreen("result");
   }
 
-  function handleDeclineCounter() {
-    const current = bids.find(b => b.id === activeBid?.id) || activeBid;
-    setActiveBid({ ...current, status:"declined" });
+  async function handleDeclineCounter() {
+    try { await api.declineCounter(activeBid.id); } catch (e) { console.error(e); }
+    refreshBids();
+    setActiveBid(p => ({ ...p, status:"declined" }));
     setScreen("result");
   }
 
-  function handleRateHotel() {
-    onRateHotel({ bidId:activeBid?.id, hotelId:selectedHotel?.id, rating:ratingVal, note:ratingNote, guestEmail:currentGuest?.email });
-    reset();
+  async function handleSignOut() {
+    await api.signOut();
+    setCurrentGuest(null); setBids([]); setScreen("listing"); setSideTab("browse");
   }
 
   function reset() {
     setScreen("listing"); setSideTab("browse");
-    setActiveBid(null); setBidAmount(""); setSelectedRoom(null); setSelectedHotel(null); setRatingVal(0); setRatingNote("");
+    setActiveBid(null); setBidAmount(""); setSelectedRoom(null); setSelectedHotel(null);
   }
 
-  // ── Main content area based on screen ────────────────────────────────────
+  // ── Main content area based on screen ──────────────────────────────────────
   function renderMain() {
-    if (screen === "listing") return <HotelListingView hotelsWithRooms={hotelsWithRooms} onSelectHotel={h => { setSelectedHotel(h); setScreen("hotel"); }} />;
+    if (screen === "listing") return <HotelListingView hotelsWithRooms={hotels} onSelectHotel={h => { setSelectedHotel(h); setScreen("hotel"); }} />;
 
     if (screen === "hotel") return (
       <div>
@@ -380,23 +403,12 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
     if (screen === "login") return (
       <div>
         <button style={S.backBtn} onClick={() => setScreen("listing")}>← Back</button>
-        <div style={S.heroBox}>
-          <div style={S.heroEyebrow}>Guest Profile</div>
-          <h2 style={{ ...S.heroTitle, fontSize:24 }}>Sign in or create account</h2>
-          <p style={S.heroSub}>Your star rating is visible to hotels when you bid. No other personal info is shared — like Uber's rider rating.</p>
-        </div>
-        <div style={S.formCard}>
-          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-            <input style={S.field} placeholder="Email address" type="email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} />
-            {loginEmail && !SEED_GUESTS.find(g=>g.email===loginEmail) && (
-              <input style={S.field} placeholder="Your name (new accounts)" value={loginName} onChange={e=>setLoginName(e.target.value)} />
-            )}
-          </div>
-          <div style={{ marginTop:12, fontSize:12, color:"#475569", lineHeight:1.6 }}>
-            Try <strong style={{color:"#94A3B8"}}>marcus@example.com</strong> or <strong style={{color:"#94A3B8"}}>sara@example.com</strong> as demo guests.
-          </div>
-          <button style={{ ...S.submitBtn, marginTop:14, opacity:!loginEmail?0.4:1 }} disabled={!loginEmail} onClick={handleLogin}>Continue</button>
-        </div>
+        <OtpLogin
+          eyebrow="Guest Profile"
+          title="Sign in to bid"
+          blurb="Enter your email and we'll send a one-time login code. Your star rating is visible to hotels when you bid — no other personal info is shared."
+          onSignedIn={() => { setScreen(selectedRoom ? "bid" : "listing"); setSideTab("browse"); }}
+        />
       </div>
     );
 
@@ -424,9 +436,9 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
               Sign in to submit a bid. Hotels will see your rating — nothing else.
             </div>
           )}
-          <div style={S.terms}>If accepted, you'll receive a confirmation link to complete payment. Your card is not charged until accepted.</div>
-          <button style={{ ...S.submitBtn, opacity:(!bidAmount||!currentGuest)?0.4:1 }} disabled={!bidAmount||!currentGuest} onClick={handleBid}>
-            {currentGuest ? "Submit Rate Request" : "Sign In to Bid"}
+          <div style={S.terms}>If accepted, you'll receive a confirmation code to give the hotel at check-in. No payment is taken here — LastKey just delivers your request.</div>
+          <button style={{ ...S.submitBtn, opacity:(!bidAmount||submitting)?0.4:1 }} disabled={!bidAmount||submitting} onClick={handleBid}>
+            {currentGuest ? (submitting ? "Submitting…" : "Submit Rate Request") : "Sign In to Bid"}
           </button>
         </div>
       </div>
@@ -437,10 +449,10 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
         <div style={{ display:"flex", justifyContent:"center", marginBottom:24 }}><TimerRing seconds={timeLeft} /></div>
         <h2 style={{ ...S.heroTitle, fontSize:22, marginBottom:10 }}>Request Sent</h2>
         <p style={{ color:"#64748B", maxWidth:300, margin:"0 auto", lineHeight:1.6 }}>
-          <strong style={{ color:"#F7F5F0" }}>{selectedHotel?.name}</strong> is reviewing your ${activeBid?.amount} request for {activeBid?.room?.name}.
+          <strong style={{ color:"#F7F5F0" }}>{activeBid?.hotel?.name}</strong> is reviewing your ${activeBid?.amount} request for {activeBid?.room?.name}.
         </p>
         <div style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:12, padding:"16px 20px", maxWidth:300, margin:"22px auto 0" }}>
-          {[["Room", activeBid?.room?.name], ["Your bid","$"+activeBid?.amount], ["Ref", activeBid?.id]].map(([l,v]) => (
+          {[["Room", activeBid?.room?.name], ["Your bid","$"+activeBid?.amount], ["Ref", activeBid?.id?.slice(0,8)]].map(([l,v]) => (
             <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", fontSize:14, borderBottom:"1px solid #1E293B" }}>
               <span style={{ color:"#64748B" }}>{l}</span>
               <span style={{ color:l==="Your bid"?"#F59E0B":"#F7F5F0", fontWeight:l==="Your bid"?700:400, fontFamily:l==="Ref"?"monospace":"inherit", fontSize:l==="Ref"?12:14 }}>{v}</span>
@@ -458,12 +470,12 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
           <div style={{ fontSize:44, marginBottom:12 }}>🤝</div>
           <h2 style={{ ...S.heroTitle, fontSize:24, marginBottom:8 }}>Counter Offer</h2>
           <p style={{ color:"#94A3B8", maxWidth:300, margin:"0 auto 20px", lineHeight:1.6 }}>
-            {selectedHotel?.name || bid?.hotel?.name} can't do ${bid?.amount}, but they're offering a counter rate.
+            {bid?.hotel?.name} can't do ${bid?.amount}, but they're offering a counter rate.
           </p>
           <div style={{ background:"#0F172A", border:"2px solid #A78BFA", borderRadius:14, padding:"24px", maxWidth:300, margin:"0 auto 20px" }}>
             <div style={{ fontSize:12, color:"#64748B", marginBottom:4 }}>Counter rate offered</div>
             <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:52, color:"#A78BFA", lineHeight:1 }}>${bid?.counterAmount}</div>
-            <div style={{ fontSize:12, color:"#475569", marginTop:6 }}>vs your bid of ${bid?.amount} · rack ${selectedRoom?.rack || bid?.room?.rack}</div>
+            <div style={{ fontSize:12, color:"#475569", marginTop:6 }}>vs your bid of ${bid?.amount} · rack ${bid?.room?.rack}</div>
             <div style={{ display:"flex", justifyContent:"center", marginTop:18 }}><TimerRing seconds={counterTimeLeft} total={COUNTER_TIMER} size={90} /></div>
             <div style={{ fontSize:12, color:"#475569", marginTop:8 }}>Respond before time runs out</div>
           </div>
@@ -477,8 +489,9 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
 
     if (screen === "result") {
       const bid = bids.find(b=>b.id===activeBid?.id) || activeBid;
-      const accepted = bid?.status === "accepted";
-      const expired  = bid?.status === "expired";
+      const status = bid ? effectiveStatus(bid) : activeBid?.status;
+      const accepted = status === "accepted" || status === "handled";
+      const expired  = status === "expired";
       return (
         <div style={{ textAlign:"center", paddingTop:48 }}>
           <div style={{ width:72, height:72, borderRadius:"50%", background:"#1E293B", display:"flex", alignItems:"center", justifyContent:"center", fontSize:30, margin:"0 auto" }}>
@@ -489,25 +502,17 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
           </h2>
           <p style={{ color:"#94A3B8", maxWidth:300, margin:"10px auto 0", lineHeight:1.7 }}>
             {accepted
-              ? `Your $${bid.amount} rate for ${bid.room?.name} was accepted. Check your email for the payment link.`
+              ? `Your $${bid?.counterAmount ?? bid?.amount} rate for ${bid?.room?.name} was accepted. Show your confirmation code at check-in.`
               : expired ? "The window closed. Try again — rooms may still be available."
               : "The hotel couldn't accept this rate. Try a different amount or room."}
           </p>
-          {accepted && (
-            <div style={{ maxWidth:300, margin:"24px auto 0" }}>
-              <div style={{ fontSize:13, color:"#64748B", marginBottom:10 }}>Rate your experience:</div>
-              <div style={{ display:"flex", justifyContent:"center", gap:8, marginBottom:12 }}>
-                {[1,2,3,4,5].map(i => (
-                  <button key={i} onClick={()=>setRatingVal(i)} style={{ fontSize:28, background:"none", border:"none", cursor:"pointer", opacity:i<=ratingVal?1:0.25, color:"#F59E0B" }}>★</button>
-                ))}
-              </div>
-              <input style={{ ...S.field, fontSize:13, marginBottom:10 }} placeholder="Optional note..." value={ratingNote} onChange={e=>setRatingNote(e.target.value)} />
-              <button style={{ ...S.submitBtn, background:"#1E293B", color:"#94A3B8", marginBottom:8 }} onClick={handleRateHotel}>Submit & Done</button>
+          {accepted && bid?.confirmationCode && (
+            <div style={{ maxWidth:300, margin:"22px auto 0", background:"#052E16", border:"1px solid #22C55E", borderRadius:12, padding:"16px 20px" }}>
+              <div style={{ fontSize:11, color:"#64748B", letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:6 }}>Confirmation Code</div>
+              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:30, color:"#22C55E", letterSpacing:"0.15em" }}>{bid.confirmationCode}</div>
             </div>
           )}
-          <button style={{ ...S.ghostBtn, marginTop: accepted?0:24 }} onClick={reset}>
-            {accepted ? "Skip" : "Browse Again"}
-          </button>
+          <button style={{ ...S.ghostBtn, marginTop:24 }} onClick={reset}>Browse Again</button>
         </div>
       );
     }
@@ -522,7 +527,7 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
               <div style={{ marginTop:14, fontSize:12, color:"#334155", lineHeight:1.7 }}>
                 Hotels see only your star rating and stay count — no name, email, or demographic info. This prevents discrimination while letting hotels make informed decisions.
               </div>
-              <button style={{ ...S.ghostBtn, marginTop:20 }} onClick={()=>{setCurrentGuest(null);setScreen("listing");setSideTab("browse");}}>Sign Out</button>
+              <button style={{ ...S.ghostBtn, marginTop:20 }} onClick={handleSignOut}>Sign Out</button>
             </>
           : <div style={S.emptyState}>
               <div style={{ marginBottom:8, fontSize:15, fontWeight:600 }}>Not signed in</div>
@@ -532,10 +537,10 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
       </div>
     );
 
-    return <HotelListingView hotelsWithRooms={hotelsWithRooms} onSelectHotel={h=>{setSelectedHotel(h);setScreen("hotel");}} />;
+    return <HotelListingView hotelsWithRooms={hotels} onSelectHotel={h=>{setSelectedHotel(h);setScreen("hotel");}} />;
   }
 
-  // ── Live requests panel (sidebar tab content) ─────────────────────────────
+  // ── Live requests panel (sidebar tab content) ──────────────────────────────
   function renderSideContent() {
     if (sideTab === "live") return (
       <div style={{ padding:"20px 16px" }}>
@@ -551,10 +556,10 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
                 </div>
                 <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, color: b.status==="countered"?"#A78BFA":"#F59E0B" }}>${b.status==="countered"?b.counterAmount:b.amount}</div>
               </div>
-              <Badge status={b.status} />
+              <Badge status={effectiveStatus(b)} />
               {b.status === "countered" && (
                 <button style={{ ...S.submitBtn, marginTop:10, padding:"9px 0", fontSize:13, background:"#A78BFA", color:"#1E0A2E" }}
-                  onClick={()=>{ setActiveBid(b); setSelectedHotel(b.hotel); setSelectedRoom(b.room); setScreen("counter"); }}>
+                  onClick={()=>{ setActiveBid(b); setSelectedHotel(b.hotel); setSelectedRoom(b.room); setCTL(secondsLeft(b)); setScreen("counter"); }}>
                   View Counter Offer →
                 </button>
               )}
@@ -576,10 +581,10 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
                   <div style={{ fontWeight:700, fontSize:13 }}>{b.room.name}</div>
                   <div style={{ fontSize:11, color:"#475569", marginTop:1 }}>{b.hotel.name}</div>
                 </div>
-                <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16, color:b.status==="accepted"?"#22C55E":"#64748B" }}>${b.amount}</div>
+                <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16, color:["accepted","handled"].includes(b.status)?"#22C55E":"#64748B" }}>${b.counterAmount ?? b.amount}</div>
               </div>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                <Badge status={b.status} />
+                <Badge status={effectiveStatus(b)} />
                 <span style={{ fontSize:11, color:"#334155" }}>Rack ${b.room.rack}</span>
               </div>
             </div>
@@ -591,13 +596,11 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
     return null; // browse and profile are rendered in renderMain
   }
 
-  // Tabs that use the sidebar panel vs tabs that show main content
   const panelTabs = ["live","history"];
   const showPanel = panelTabs.includes(sideTab);
 
   return (
     <div style={{ minHeight:"100vh", background:"#0A0F1E", color:"#F7F5F0", fontFamily:"Inter,sans-serif", display:"flex" }}>
-      {/* Counter toast — fires regardless of current screen */}
       {counterToast && (
         <div style={{ ...S.toast, borderColor:"#A78BFA" }}>
           <span style={{ ...S.toastDot, background:"#A78BFA" }} />
@@ -608,7 +611,6 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
         </div>
       )}
 
-      {/* Guest Sidebar */}
       <div style={{ ...S.sidebar, width:200 }}>
         <div style={S.sidebarTop}>
           <div style={S.logo}>LK</div>
@@ -649,7 +651,6 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
         )}
       </div>
 
-      {/* Main content */}
       <div style={{ flex:1, overflowY:"auto", padding:"28px 28px 60px" }}>
         {showPanel ? renderSideContent() : renderMain()}
       </div>
@@ -660,19 +661,20 @@ function GuestView({ bids, onSubmitBid, guestProfiles, onGuestAuth, onRateHotel 
 // ─────────────────────────────────────────────────────────────────────────────
 // KPI PANEL
 // ─────────────────────────────────────────────────────────────────────────────
-function KPIPanel({ bids }) {
-  const accepted = bids.filter(b => b.status === "accepted");
+function KPIPanel({ bids, totalRooms = 0 }) {
+  const accepted = bids.filter(b => ["accepted","handled"].includes(b.status));
   const declined = bids.filter(b => b.status === "declined");
   const expired  = bids.filter(b => b.status === "expired");
   const total    = bids.length;
 
-  const revenue       = accepted.reduce((s,b) => s+b.amount, 0);
+  const amt = (b) => b.counterAmount ?? b.amount;
+  const revenue       = accepted.reduce((s,b) => s+amt(b), 0);
   const potentialRack = accepted.reduce((s,b) => s+b.room.rack, 0);
   const avgBid        = total > 0 ? Math.round(bids.reduce((s,b)=>s+b.amount,0)/total) : 0;
   const avgAccepted   = accepted.length > 0 ? Math.round(revenue/accepted.length) : 0;
   const acceptRate    = total > 0 ? Math.round((accepted.length/total)*100) : 0;
   const discountVsRack= potentialRack > 0 ? Math.round(((potentialRack-revenue)/potentialRack)*100) : 0;
-  const avgBidToRack  = accepted.length > 0 ? Math.round((accepted.reduce((s,b)=>s+(b.amount/b.room.rack),0)/accepted.length)*100) : 0;
+  const avgBidToRack  = accepted.length > 0 ? Math.round((accepted.reduce((s,b)=>s+(amt(b)/b.room.rack),0)/accepted.length)*100) : 0;
   const countered     = bids.filter(b=>b.status==="countered");
 
   const kpis = [
@@ -683,7 +685,7 @@ function KPIPanel({ bids }) {
     { label:"Discount vs Rack",   value:`${discountVsRack}%`,               sub:"below rack on accepted bids",  color:"#64748B" },
     { label:"Counter Offers Sent",value:countered.length,                   sub:"awaiting guest response",      color:"#F59E0B" },
     { label:"Total Requests",     value:total,                              sub:`${declined.length} declined · ${expired.length} expired`, color:"#F7F5F0" },
-    { label:"Rooms Still Empty",  value:Math.max(0,3-accepted.length),      sub:"out of 3 available tonight",   color:accepted.length>=3?"#22C55E":"#EF4444" },
+    { label:"Rooms Still Empty",  value:Math.max(0,totalRooms-accepted.length), sub:`out of ${totalRooms} available tonight`, color:totalRooms>0&&accepted.length>=totalRooms?"#22C55E":"#EF4444" },
   ];
 
   return (
@@ -708,10 +710,10 @@ function KPIPanel({ bids }) {
             <div key={b.id} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:8 }}>
               <div style={{ width:72, fontSize:12, color:"#475569", flexShrink:0 }}>{b.room.name.split(" ")[0]}</div>
               <div style={{ flex:1, background:"#1E293B", borderRadius:4, height:8, overflow:"hidden" }}>
-                <div style={{ width:`${Math.min(100,(b.amount/b.room.rack)*100)}%`, height:"100%", borderRadius:4,
-                  background:b.status==="accepted"?"#22C55E":b.status==="countered"?"#A78BFA":b.status==="pending"?"#F59E0B":"#EF4444" }} />
+                <div style={{ width:`${Math.min(100,(amt(b)/b.room.rack)*100)}%`, height:"100%", borderRadius:4,
+                  background:["accepted","handled"].includes(b.status)?"#22C55E":b.status==="countered"?"#A78BFA":b.status==="pending"?"#F59E0B":"#EF4444" }} />
               </div>
-              <div style={{ width:36, fontSize:12, fontWeight:700, color:"#F7F5F0", textAlign:"right" }}>${b.amount}</div>
+              <div style={{ width:36, fontSize:12, fontWeight:700, color:"#F7F5F0", textAlign:"right" }}>${amt(b)}</div>
               <div style={{ width:60, flexShrink:0 }}><Badge status={b.status} /></div>
             </div>
           ))}
@@ -724,45 +726,111 @@ function KPIPanel({ bids }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // HOTEL DASHBOARD
 // ─────────────────────────────────────────────────────────────────────────────
-function HotelDashboard({ bids, onDecide, onCounter }) {
+function HotelDashboard() {
+  const [session, setSession]           = useState(undefined); // undefined = loading
+  const [hotel, setHotel]               = useState(null);
+  const [rooms, setRooms]               = useState([]);
+  const [bids, setBids]                 = useState([]);
   const [activeTab, setActiveTab]       = useState("live");
-  const [timers, setTimers]             = useState({});
-  const [floors, setFloors]             = useState(HOTELS_DB[0].rooms.reduce((a,r)=>({...a,[r.id]:r.floor_price}),{}));
-  const [floorInputs, setFloorInputs]   = useState(HOTELS_DB[0].rooms.reduce((a,r)=>({...a,[r.id]:r.floor_price}),{}));
+  const [now, setNow]                   = useState(Date.now());
+  const [floorInputs, setFloorInputs]   = useState({});
   const [counterInputs, setCounterInputs] = useState({});
   const [notification, setNotification] = useState(null);
   const [expandedGuest, setExpandedGuest] = useState(null);
   const prevCount = useRef(0);
 
-  useEffect(() => {
-    const iv = setInterval(() => {
-      setTimers(prev => {
-        const next = { ...prev };
-        let changed = false;
-        bids.forEach(b => {
-          if (b.status === "pending") {
-            const elapsed = Math.floor((Date.now()-new Date(b.submittedAt).getTime())/1000);
-            const rem = Math.max(0, TIMER_SECONDS - elapsed);
-            if (next[b.id] !== rem) { next[b.id] = rem; changed = true; }
-          }
-        });
-        return changed ? next : prev;
-      });
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [bids]);
+  const refreshBids = useCallback(async (h) => {
+    const hot = h || hotel;
+    if (!hot) return;
+    try { setBids(await api.getHotelRequests(hot.id)); } catch (e) { console.error(e); }
+  }, [hotel]);
 
+  // ── Session + load owner's hotel/rooms/requests + realtime ─────────────────
   useEffect(() => {
-    if (bids.length > prevCount.current) {
-      setNotification(bids[bids.length-1]);
+    let unsub = null;
+    async function boot(s) {
+      setSession(s || null);
+      if (!s) { setHotel(null); setRooms([]); setBids([]); return; }
+      try {
+        const h = await api.getOwnerHotel(s.user.id);
+        setHotel(h);
+        if (!h) return;
+        const rms = await api.getOwnerRooms();
+        setRooms(rms);
+        setFloorInputs(rms.reduce((a,r)=>({ ...a, [r.id]: r.floor_price ?? "" }), {}));
+        refreshBids(h);
+        if (unsub) unsub();
+        unsub = api.subscribeRequests("hotel_id", h.id, () => refreshBids(h));
+      } catch (e) { console.error(e); }
+    }
+    api.getSession().then(boot);
+    const { data: sub } = api.onAuthChange(boot);
+    return () => { if (unsub) unsub(); sub?.subscription?.unsubscribe(); };
+  }, [refreshBids]);
+
+  // ── 1s ticker to recompute live timers from expires_at ─────────────────────
+  useEffect(() => {
+    const iv = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // ── New-request toast ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const pendings = bids.filter(b => b.status === "pending");
+    if (pendings.length > prevCount.current) {
+      setNotification(bids[0]);
       setTimeout(() => setNotification(null), 5000);
     }
-    prevCount.current = bids.length;
+    prevCount.current = pendings.length;
   }, [bids]);
 
-  const liveBids = bids.filter(b => b.status === "pending");
-  const histBids = bids.filter(b => b.status !== "pending");
-  const accepted = bids.filter(b => b.status === "accepted");
+  async function onDecide(id, status) {
+    try { await api.hotelDecide(id, status); refreshBids(); } catch (e) { console.error(e); alert("Action failed."); }
+  }
+  async function onCounter(id, amount) {
+    try { await api.hotelCounter(id, amount); refreshBids(); } catch (e) { console.error(e); alert("Counter failed."); }
+  }
+  async function onSetFloor(roomId) {
+    const v = parseInt(floorInputs[roomId]);
+    if (Number.isNaN(v)) return;
+    try {
+      await api.setBidFloor(roomId, v);
+      setRooms(prev => prev.map(r => r.id===roomId ? { ...r, floor_price:v } : r));
+    } catch (e) { console.error(e); alert("Could not update bid floor."); }
+  }
+  async function onSignOut() { await api.signOut(); }
+
+  const liveBids = bids.filter(b => effectiveStatus(b) === "pending");
+  const histBids = bids.filter(b => effectiveStatus(b) !== "pending");
+  const accepted = bids.filter(b => ["accepted","handled"].includes(b.status));
+
+  // ── Auth gate ──────────────────────────────────────────────────────────────
+  if (session === undefined) {
+    return <div style={{ ...S.dashWrap, alignItems:"center", justifyContent:"center", color:"#475569" }}>Loading…</div>;
+  }
+  if (!session || !hotel) {
+    return (
+      <div style={{ ...S.dashWrap, alignItems:"center", justifyContent:"center" }}>
+        <div style={{ width:380, maxWidth:"90%" }}>
+          <div style={{ display:"flex", justifyContent:"center", marginBottom:18 }}><div style={S.logo}>LK</div></div>
+          {session && !hotel ? (
+            <div style={S.emptyState}>
+              <div style={{ fontWeight:700, marginBottom:8 }}>No hotel linked to this account</div>
+              <div style={{ color:"#475569", fontSize:13, marginBottom:16 }}>This login isn&apos;t tied to a property yet. An admin must set <code>hotels.owner_user_id</code> to your user id.</div>
+              <button style={S.ghostBtn} onClick={onSignOut}>Sign Out</button>
+            </div>
+          ) : (
+            <OtpLogin
+              eyebrow="Hotel Dashboard"
+              title="Hotel sign in"
+              blurb="Enter your property's email to receive a one-time login code. You'll see live rate requests for your hotel only."
+              onSignedIn={() => {}}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={S.dashWrap}>
@@ -772,18 +840,17 @@ function HotelDashboard({ bids, onDecide, onCounter }) {
           <div>
             <div style={{ fontWeight:600, fontSize:14 }}>New Rate Request</div>
             <div style={{ fontSize:12, color:"#94A3B8", marginTop:2 }}>
-              ${notification.amount} on {notification.room.name} — {notification.guest?.name} (⭐ {notification.guest?.rating||"New"})
+              ${notification.amount} on {notification.room?.name} — {notification.guest?.name} (⭐ {notification.guest?.rating||"New"})
             </div>
           </div>
         </div>
       )}
 
-      {/* Sidebar */}
       <div style={S.sidebar}>
         <div style={S.sidebarTop}>
           <div style={S.logo}>LK</div>
           <div style={{ marginTop:10 }}>
-            <div style={{ fontWeight:700, fontSize:13 }}>The Maison Slidell</div>
+            <div style={{ fontWeight:700, fontSize:13 }}>{hotel.name}</div>
             <div style={{ fontSize:11, color:"#475569", marginTop:2 }}>Hotel Dashboard</div>
           </div>
         </div>
@@ -809,21 +876,21 @@ function HotelDashboard({ bids, onDecide, onCounter }) {
               <div style={{ fontSize:10, color:"#475569" }}>Accepted</div>
             </div>
             <div>
-              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color:"#22C55E" }}>${accepted.reduce((s,b)=>s+b.amount,0)}</div>
+              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color:"#22C55E" }}>${accepted.reduce((s,b)=>s+(b.counterAmount??b.amount),0)}</div>
               <div style={{ fontSize:10, color:"#475569" }}>Revenue</div>
             </div>
           </div>
+          <button style={{ ...S.ghostBtn, marginTop:14, fontSize:12, width:"100%", textAlign:"center" }} onClick={onSignOut}>Sign Out</button>
         </div>
       </div>
 
-      {/* Main */}
       <div style={S.dashMain}>
 
         {activeTab === "live" && (
           <div>
             <div style={S.dashSectionHead}>
               <h2 style={S.dashTitle}>Live Requests</h2>
-              <span style={{ color:"#475569", fontSize:14 }}>Accept, decline, or send a counter offer</span>
+              <span style={{ color:"#475569", fontSize:14 }}>Accept, decline, or send a counter offer. Bids below your floor auto-decline before they reach you.</span>
             </div>
             {liveBids.length === 0
               ? <div style={S.emptyState}>
@@ -832,21 +899,22 @@ function HotelDashboard({ bids, onDecide, onCounter }) {
                   <div style={{ color:"#475569", fontSize:13 }}>Bids from guests appear here in real time.</div>
                 </div>
               : liveBids.map(bid => {
-                  const t = timers[bid.id] ?? TIMER_SECONDS;
-                  const floor = floors[bid.room.id] ?? 0;
-                  const aboveFloor = bid.amount >= floor;
+                  const t = Math.max(0, Math.round((new Date(bid.expiresAt).getTime() - now)/1000));
+                  const room = rooms.find(r => r.id === bid.room.id);
+                  const floor = room?.floor_price;
+                  const aboveFloor = floor == null ? true : bid.amount >= floor;
                   const cv = counterInputs[bid.id] || "";
                   return (
                     <div key={bid.id} style={{ ...S.bidCard, borderColor:aboveFloor?"#22C55E22":"#EF444422", marginBottom:16 }}>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
                         <div>
                           <div style={S.bidRoom}>{bid.room.name} <span style={{ color:"#475569", fontWeight:400, fontSize:14 }}>· {bid.room.type}</span></div>
-                          <div style={{ fontSize:12, color:"#475569", marginTop:2 }}>Ref: {bid.id}</div>
+                          <div style={{ fontSize:12, color:"#475569", marginTop:2 }}>Ref: {bid.id.slice(0,8)}</div>
                           <div style={{ display:"flex", gap:8, alignItems:"center", marginTop:8, flexWrap:"wrap" }}>
                             <Badge status="pending" />
-                            {aboveFloor
+                            {floor != null && (aboveFloor
                               ? <span style={{ fontSize:12, color:"#22C55E" }}>✓ Above floor (${floor})</span>
-                              : <span style={{ fontSize:12, color:"#EF4444" }}>✕ Below floor (${floor})</span>}
+                              : <span style={{ fontSize:12, color:"#EF4444" }}>✕ Below floor (${floor})</span>)}
                           </div>
                         </div>
                         <div style={{ textAlign:"right" }}>
@@ -908,13 +976,13 @@ function HotelDashboard({ bids, onDecide, onCounter }) {
                     <div key={b.id} style={{ display:"grid", gridTemplateColumns:"2fr 1.5fr 0.8fr 0.8fr 1fr 1.2fr", padding:"14px 20px", borderTop:"1px solid #1E293B", alignItems:"center" }}>
                       <span>
                         <div style={{ fontWeight:600, fontSize:14 }}>{b.guest?.name||"Guest"}</div>
-                        <div style={{ fontSize:11, color:"#475569" }}>{b.id}</div>
+                        <div style={{ fontSize:11, color:"#475569" }}>{b.id.slice(0,8)}</div>
                       </span>
                       <span style={{ fontSize:13, color:"#94A3B8" }}>{b.room.name}</span>
-                      <span style={{ fontWeight:700, color:b.status==="accepted"?"#22C55E":"#F7F5F0" }}>${b.amount}</span>
+                      <span style={{ fontWeight:700, color:["accepted","handled"].includes(b.status)?"#22C55E":"#F7F5F0" }}>${b.counterAmount ?? b.amount}</span>
                       <span style={{ fontSize:13, color:"#475569" }}>${b.room.rack}</span>
                       <span style={{ fontSize:13 }}>{b.guest?.rating?`${b.guest.rating} ★`:"New"}</span>
-                      <span><Badge status={b.status} /></span>
+                      <span><Badge status={effectiveStatus(b)} /></span>
                     </div>
                   ))}
                 </div>
@@ -922,7 +990,7 @@ function HotelDashboard({ bids, onDecide, onCounter }) {
           </div>
         )}
 
-        {activeTab === "kpi" && <KPIPanel bids={bids} />}
+        {activeTab === "kpi" && <KPIPanel bids={bids} totalRooms={rooms.length} />}
 
         {activeTab === "guests" && (
           <div>
@@ -939,7 +1007,7 @@ function HotelDashboard({ bids, onDecide, onCounter }) {
               <div key={guest.email} style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:12, padding:"16px 18px", marginBottom:10 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:14 }}>
                   <div style={{ width:46, height:46, borderRadius:"50%", background:"#1E3A5F", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:17, color:"#F59E0B" }}>
-                    {guest.name.split(" ").map(n=>n[0]).join("")}
+                    {(guest.name||"?").split(" ").map(n=>n[0]).join("")}
                   </div>
                   <div style={{ flex:1 }}>
                     <div style={{ display:"flex", gap:8, alignItems:"center" }}>
@@ -967,7 +1035,7 @@ function HotelDashboard({ bids, onDecide, onCounter }) {
               <h2 style={S.dashTitle}>Room & Bid Floor Settings</h2>
               <span style={{ color:"#475569", fontSize:14 }}>Floors are never shown to guests. Bids below floor auto-decline instantly.</span>
             </div>
-            {HOTELS_DB[0].rooms.map(room => (
+            {rooms.map(room => (
               <div key={room.id} style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:14, padding:20, display:"flex", gap:16, alignItems:"center", marginBottom:14 }}>
                 <div style={{ width:110, flexShrink:0 }}><RoomIcon type={room.image} /></div>
                 <div style={{ flex:1 }}>
@@ -979,15 +1047,15 @@ function HotelDashboard({ bids, onDecide, onCounter }) {
                   <div style={{ fontSize:11, color:"#64748B", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.06em" }}>Bid Floor</div>
                   <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                     <span style={{ color:"#64748B" }}>$</span>
-                    <input type="number" value={floorInputs[room.id]}
+                    <input type="number" value={floorInputs[room.id] ?? ""}
                       onChange={e=>setFloorInputs(p=>({...p,[room.id]:e.target.value}))}
                       style={{ width:68, background:"#1E293B", border:"1px solid #2D3F55", borderRadius:6, padding:"7px 10px", color:"#F7F5F0", fontSize:17, fontWeight:700, fontFamily:"Space Grotesk,sans-serif", outline:"none", textAlign:"center" }} />
                     <button style={{ padding:"9px 12px", background:"#F59E0B", color:"#0A0F1E", border:"none", borderRadius:6, fontWeight:700, fontSize:12, fontFamily:"Inter,sans-serif", cursor:"pointer" }}
-                      onClick={()=>setFloors(p=>({...p,[room.id]:parseInt(floorInputs[room.id])}))}>
+                      onClick={()=>onSetFloor(room.id)}>
                       Set
                     </button>
                   </div>
-                  <div style={{ fontSize:12, color:"#22C55E", marginTop:7 }}>Active: ${floors[room.id]}</div>
+                  <div style={{ fontSize:12, color:"#22C55E", marginTop:7 }}>Active: ${room.floor_price ?? "—"}</div>
                 </div>
               </div>
             ))}
@@ -1002,37 +1070,7 @@ function HotelDashboard({ bids, onDecide, onCounter }) {
 // ROOT APP
 // ─────────────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [view, setView]                   = useState("guest");
-  const [bids, setBids]                   = useState([]);
-  const [guestProfiles, setGuestProfiles] = useState(SEED_GUESTS);
-  const [hotelRatings, setHotelRatings]   = useState([]);
-
-  function handleSubmitBid(bid) {
-    setBids(prev => [...prev, bid]);
-    setTimeout(() => {
-      setBids(prev => prev.map(b => {
-        if (b.id !== bid.id || b.status !== "pending") return b;
-        const hotel = HOTELS_DB.find(h=>h.id===bid.hotel.id);
-        const room  = hotel?.rooms.find(r=>r.id===bid.room.id);
-        if (b.amount < (room?.floor_price ?? 0)) return { ...b, status:"declined" };
-        return b;
-      }));
-    }, 800);
-  }
-
-  function handleDecide(id, status) {
-    setBids(prev => prev.map(b => b.id===id ? {...b, status} : b));
-  }
-
-  function handleCounter(id, counterAmount) {
-    setBids(prev => prev.map(b => b.id===id ? {...b, status:"countered", counterAmount} : b));
-  }
-
-  function handleGuestAuth(guest) {
-    setGuestProfiles(prev => prev.find(g=>g.email===guest.email) ? prev : [...prev, guest]);
-  }
-
-  const liveBidCount = bids.filter(b=>b.status==="pending").length;
+  const [view, setView] = useState("guest");
 
   return (
     <>
@@ -1046,15 +1084,10 @@ export default function App() {
 
       <div style={{ position:"fixed", top:16, right:16, zIndex:1000, display:"flex", gap:4, background:"#0F172A", padding:4, borderRadius:10, border:"1px solid #1E293B" }}>
         <button style={{ ...S.toggleBtn, ...(view==="guest"?S.toggleActive:{}) }} onClick={()=>setView("guest")}>Guest View</button>
-        <button style={{ ...S.toggleBtn, ...(view==="hotel"?S.toggleActive:{}), position:"relative" }} onClick={()=>setView("hotel")}>
-          Hotel Dashboard
-          {liveBidCount > 0 && <span style={{ position:"absolute", top:-6, right:-6, background:"#EF4444", color:"#fff", fontSize:10, fontWeight:700, width:18, height:18, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center" }}>{liveBidCount}</span>}
-        </button>
+        <button style={{ ...S.toggleBtn, ...(view==="hotel"?S.toggleActive:{}) }} onClick={()=>setView("hotel")}>Hotel Dashboard</button>
       </div>
 
-      {view==="guest"
-        ? <GuestView bids={bids} onSubmitBid={handleSubmitBid} guestProfiles={guestProfiles} onGuestAuth={handleGuestAuth} onRateHotel={r=>setHotelRatings(p=>[...p,r])} />
-        : <HotelDashboard bids={bids} onDecide={handleDecide} onCounter={handleCounter} />}
+      {view==="guest" ? <GuestView /> : <HotelDashboard />}
     </>
   );
 }

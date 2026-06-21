@@ -30,7 +30,9 @@ vercel
 3. Import your repo — Vercel auto-detects Next.js
 4. Click Deploy
 
-No environment variables needed for this MVP.
+Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (see
+`.env.local.example`). The anon key is safe to expose — Row Level Security is
+the gate. Add the same two vars in the Vercel project settings.
 
 ## How to test the full flow
 
@@ -48,18 +50,36 @@ No environment variables needed for this MVP.
 - If a guest bids below the floor, the request is instantly declined
 - The floor is **never shown to the guest**
 
-## Next steps for real MVP
+## Data layer
 
-- [ ] Connect Stripe for payment on acceptance
-- [ ] Add SMS/push notifications for hotel (Twilio)
-- [ ] Replace in-memory state with a real-time database (Supabase or Firebase)
+State is backed by Supabase (project `kzzlfubehktzsuxutwmd`), not in-memory:
+
+- **Auth** — email OTP via Supabase Auth for both guests and hotels.
+- **Browse** — `getHotelsWithRooms()` reads hotels + rooms (never `bid_floor`,
+  which is column-revoked for guests).
+- **Bids** — a `requests` row is inserted on submit; a `BEFORE INSERT` trigger
+  auto-declines any bid below the room's hidden `bid_floor`.
+- **Realtime** — guest and hotel views subscribe to `requests` changes, so
+  accept/decline/counter propagate live (no SMS, in-app only).
+- **Bid floor** — the dashboard reads it through the `owner_rooms()` RPC, gated
+  to the owning hotel.
+
+LastKey is a messenger only: no payments and no SMS. On acceptance the guest
+gets a confirmation code to present at check-in; the hotel keys the booking into
+its own PMS.
+
+> One-time setup per property: after a hotel signs in via OTP, set
+> `hotels.owner_user_id` to that auth user's id so the dashboard resolves it.
+
+## Next steps
+
 - [ ] Add a shareable guest link (e.g. `yourhotel.com/tonight`)
-- [ ] Add check-in date / nights selector
-- [ ] Rate parity: position as "Rate Request" not "Discount"
+- [ ] Google OAuth for guest login (dashboard config, no code change)
+- [ ] Image gallery cards once storage bucket + uploads exist
 
 ## Tech stack
 
 - Next.js 14 (Pages Router)
 - React 18
+- Supabase (`@supabase/supabase-js`) — Postgres, Auth, Realtime, RLS
 - No external UI libraries
-- No backend (MVP uses in-memory state — resets on refresh)
