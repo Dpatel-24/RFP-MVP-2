@@ -125,30 +125,25 @@ function GuestProfileCard({ guest, compact = false }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EMAIL OTP LOGIN (shared by guest + hotel)
+// EMAIL + PASSWORD LOGIN (shared by guest + hotel)
 // ─────────────────────────────────────────────────────────────────────────────
-function OtpLogin({ title, eyebrow, blurb, onSignedIn }) {
-  const [step, setStep]   = useState("email");
-  const [email, setEmail] = useState("");
-  const [code, setCode]   = useState("");
-  const [busy, setBusy]   = useState(false);
-  const [msg, setMsg]     = useState(null);
+function PasswordLogin({ title, eyebrow, blurb, onSignedIn }) {
+  const [email, setEmail]       = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy]         = useState(false);
+  const [msg, setMsg]           = useState(null);
 
-  async function send() {
-    if (!email) return;
+  async function submit(mode) {
+    if (!email || !password) return;
     setBusy(true); setMsg(null);
-    const { error } = await api.sendOtp(email.trim());
+    const fn = mode === "signup" ? api.signUp : api.signIn;
+    const { data, error } = await fn(email.trim(), password);
     setBusy(false);
     if (error) { setMsg(error.message); return; }
-    setStep("code");
-  }
-
-  async function verify() {
-    if (!code) return;
-    setBusy(true); setMsg(null);
-    const { data, error } = await api.verifyOtp(email.trim(), code.trim());
-    setBusy(false);
-    if (error) { setMsg(error.message); return; }
+    if (!data.session) {
+      setMsg("Account created, but email confirmation is on. Turn off \"Confirm email\" in Supabase Auth, then sign in.");
+      return;
+    }
     onSignedIn(data.user, email.trim());
   }
 
@@ -160,30 +155,20 @@ function OtpLogin({ title, eyebrow, blurb, onSignedIn }) {
         <p style={S.heroSub}>{blurb}</p>
       </div>
       <div style={S.formCard}>
-        {step === "email" ? (
-          <>
-            <input style={S.field} placeholder="Email address" type="email" value={email}
-              onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} />
-            <button style={{ ...S.submitBtn, marginTop:14, opacity:(!email||busy)?0.4:1 }} disabled={!email||busy} onClick={send}>
-              {busy ? "Sending…" : "Send Login Code"}
-            </button>
-          </>
-        ) : (
-          <>
-            <div style={{ fontSize:13, color:"#94A3B8", marginBottom:12 }}>
-              We sent a 6-digit code to <strong style={{color:"#F7F5F0"}}>{email}</strong>.
-            </div>
-            <input style={{ ...S.field, fontFamily:"Space Grotesk,sans-serif", fontSize:20, letterSpacing:"0.3em", textAlign:"center" }}
-              placeholder="••••••" inputMode="numeric" value={code}
-              onChange={e=>setCode(e.target.value)} onKeyDown={e=>e.key==="Enter"&&verify()} />
-            <button style={{ ...S.submitBtn, marginTop:14, opacity:(!code||busy)?0.4:1 }} disabled={!code||busy} onClick={verify}>
-              {busy ? "Verifying…" : "Verify & Continue"}
-            </button>
-            <button style={{ ...S.ghostBtn, marginTop:10, width:"100%", textAlign:"center" }} onClick={()=>{setStep("email");setCode("");setMsg(null);}}>
-              Use a different email
-            </button>
-          </>
-        )}
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <input style={S.field} placeholder="Email address" type="email" value={email}
+            onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit("signin")} />
+          <input style={S.field} placeholder="Password (min 6 characters)" type="password" value={password}
+            onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit("signin")} />
+        </div>
+        <div style={{ display:"flex", gap:10, marginTop:14 }}>
+          <button style={{ ...S.submitBtn, flex:1, opacity:(!email||!password||busy)?0.4:1 }} disabled={!email||!password||busy} onClick={()=>submit("signin")}>
+            {busy ? "…" : "Sign In"}
+          </button>
+          <button style={{ ...S.submitBtn, flex:1, background:"#1E293B", color:"#94A3B8", opacity:(!email||!password||busy)?0.4:1 }} disabled={!email||!password||busy} onClick={()=>submit("signup")}>
+            Create Account
+          </button>
+        </div>
         {msg && <div style={{ marginTop:12, fontSize:13, color:"#EF4444" }}>{msg}</div>}
       </div>
     </div>
@@ -403,10 +388,10 @@ function GuestView() {
     if (screen === "login") return (
       <div>
         <button style={S.backBtn} onClick={() => setScreen("listing")}>← Back</button>
-        <OtpLogin
+        <PasswordLogin
           eyebrow="Guest Profile"
           title="Sign in to bid"
-          blurb="Enter your email and we'll send a one-time login code. Your star rating is visible to hotels when you bid — no other personal info is shared."
+          blurb="Sign in or create an account with email and password. Your star rating is visible to hotels when you bid — no other personal info is shared."
           onSignedIn={() => { setScreen(selectedRoom ? "bid" : "listing"); setSideTab("browse"); }}
         />
       </div>
@@ -820,10 +805,10 @@ function HotelDashboard() {
               <button style={S.ghostBtn} onClick={onSignOut}>Sign Out</button>
             </div>
           ) : (
-            <OtpLogin
+            <PasswordLogin
               eyebrow="Hotel Dashboard"
               title="Hotel sign in"
-              blurb="Enter your property's email to receive a one-time login code. You'll see live rate requests for your hotel only."
+              blurb="Sign in with your property's email and password. You'll see live rate requests for your hotel only."
               onSignedIn={() => {}}
             />
           )}
