@@ -99,6 +99,7 @@ function Badge({ status }) {
     handled:   { label:"Confirmed",         color:"#22C55E", bg:"#052E16" },
     declined:  { label:"Declined",          color:"#EF4444", bg:"#3B0000" },
     expired:   { label:"Expired",           color:"#64748B", bg:"#1E293B" },
+    cancelled: { label:"Cancelled",         color:"#64748B", bg:"#1E293B" },
   };
   const s = map[status] || map.pending;
   return (
@@ -503,10 +504,24 @@ function GuestView() {
     return () => clearInterval(iv);
   }, []);
 
+  async function handleCancel(id) {
+    if (!id) return;
+    if (typeof window !== "undefined" && !window.confirm("Cancel this rate request? This can't be undone.")) return;
+    try {
+      await api.cancelRequest(id);
+      refreshBids();
+    } catch (e) { console.error(e); }
+  }
+
   async function handleBid() {
     if (!currentGuest) { setScreen("login"); return; }
     const amount = parseInt(bidAmount);
     if (!amount || amount < 1) return;
+    // Defensive: prevent a second open request at the same hotel.
+    if (myLive.some(b => b.hotel?.id === selectedHotel?.id)) {
+      alert("You already have an open request at this hotel. Cancel it before submitting a new one.");
+      return;
+    }
     setSubmitting(true);
     try {
       const bid = await api.submitBid({ hotelId: selectedHotel.id, roomId: selectedRoom.id, guestId: currentGuest.id, amount });
@@ -553,6 +568,8 @@ function GuestView() {
       const fromPrice = Math.min(...selectedHotel.rooms.map(r=>r.rack));
       const galleryThumbs = selectedHotel.rooms.map(r=>r.imageUrl).filter(Boolean).slice(0,4);
       const allAmenities = [...new Set(selectedHotel.rooms.flatMap(r=>r.amenities||[]))];
+      // Guest can only have one open request per hotel.
+      const pendingHere = myLive.find(b => b.hotel?.id === selectedHotel.id) || null;
       const facts = [
         ["🛏", `${selectedHotel.rooms.length} room type${selectedHotel.rooms.length>1?"s":""}`],
         ["💵", `From $${fromPrice}`],
@@ -623,24 +640,46 @@ function GuestView() {
 
             {/* Rooms */}
             <div style={SL.sectionLabel}>Available Tonight</div>
+            {pendingHere && (
+              <div style={{ ...SL.panel, padding:"12px 14px", marginBottom:14, background:"#FFFBEB", borderColor:"#FCD34D", display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+                <div style={{ fontSize:13, color:"#92400E" }}>
+                  You already have a {effectiveStatus(pendingHere) === "countered" ? "counter offer" : "pending request"} at this hotel — only one at a time.
+                </div>
+                <button style={{ ...SL.ghostBtn, padding:"7px 12px", fontSize:12 }} onClick={()=>setSideTab("live")}>View Live Requests</button>
+              </div>
+            )}
             <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-              {selectedHotel.rooms.map(room => (
-                <div key={room.id} style={{ ...SL.card, cursor:"default", display:"flex", flexWrap:"wrap" }}>
+              {selectedHotel.rooms.map(room => {
+                const isPendingRoom = pendingHere && pendingHere.room?.id === room.id;
+                const blocked = !!pendingHere;
+                return (
+                <div key={room.id} style={{ ...SL.card, cursor:"default", display:"flex", flexWrap:"wrap", opacity: blocked && !isPendingRoom ? 0.55 : 1 }}>
                   <div style={{ width:200, flexShrink:0 }}>
                     <ImageOrIcon url={room.imageUrl} type={room.image} height={170} radius={0} />
                   </div>
                   <div style={{ flex:1, minWidth:220, padding:"14px 16px", display:"flex", flexDirection:"column" }}>
-                    <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16 }}>{room.name}</div>
-                    <div style={{ fontSize:13, color:SL.sub, marginTop:2 }}>{room.type} · {room.sqft} sq ft · Floor {room.floor}</div>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
+                      <div>
+                        <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16 }}>{room.name}</div>
+                        <div style={{ fontSize:13, color:SL.sub, marginTop:2 }}>{room.type} · {room.sqft} sq ft · Floor {room.floor}</div>
+                      </div>
+                      {isPendingRoom && <Badge status={effectiveStatus(pendingHere)} />}
+                    </div>
                     <div style={{ display:"flex", flexWrap:"wrap", gap:6, margin:"10px 0" }}>{room.amenities.map(a => <span key={a} style={SL.amenityTag}>{a}</span>)}</div>
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:"auto", marginBottom:10 }}>
                       <span style={{ fontSize:12, color:SL.faint }}>Rack rate</span>
                       <span style={{ fontSize:14, color:SL.sub, textDecoration:"line-through" }}>${room.rack}</span>
                     </div>
-                    <button style={SL.primaryBtn} onClick={() => { setSelectedRoom(room); setScreen("bid"); }}>Request a Rate →</button>
+                    {blocked
+                      ? <button style={{ ...SL.primaryBtn, background:"#E5E7EB", color:"#9CA3AF", cursor:"not-allowed" }} disabled>
+                          {isPendingRoom ? "Request in progress" : "Request locked — 1 per hotel"}
+                        </button>
+                      : <button style={SL.primaryBtn} onClick={() => { setSelectedRoom(room); setScreen("bid"); }}>Request a Rate →</button>
+                    }
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Description */}
@@ -939,26 +978,50 @@ function GuestView() {
           : myLive.map(b => {
             const rem = Math.max(0, Math.round((new Date(b.expiresAt).getTime() - now)/1000));
             const total = b.status === "countered" ? COUNTER_TIMER : TIMER_SECONDS;
+            const rate = b.status === "countered" ? b.counterAmount : b.amount;
+            const taxes = Math.round(rate * TAX_RATE);
+            const estTotal = rate + taxes;
             return (
-            <div key={b.id} style={{ ...SL.panel, padding:"14px 16px", marginBottom:12 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, marginBottom:10 }}>
+            <div key={b.id} style={{ ...SL.panel, padding:"16px 18px", marginBottom:12 }}>
+              {/* Top row: room info + amount */}
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, marginBottom:14 }}>
                 <div>
-                  <div style={{ fontWeight:700, fontSize:14 }}>{b.room.name}</div>
+                  <div style={{ fontWeight:700, fontSize:15 }}>{b.room.name}</div>
                   <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>{b.hotel.name}</div>
-                  <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>📅 {shortDate(b.stayDate)}</div>
+                  <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>{shortDate(b.stayDate)}</div>
                   <div style={{ marginTop:8 }}><Badge status={effectiveStatus(b)} /></div>
                 </div>
-                <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, flexShrink:0 }}>
-                  <TimerRing seconds={rem} total={total} size={64} />
-                  <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16, color: b.status==="countered"?"#7C3AED":"#B45309" }}>${b.status==="countered"?b.counterAmount:b.amount}</div>
+                <div style={{ textAlign:"right", flexShrink:0 }}>
+                  <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color: b.status==="countered"?"#7C3AED":"#B45309" }}>${rate}</div>
+                  <div style={{ fontSize:11, color:SL.faint, marginTop:2, letterSpacing:"0.04em", textTransform:"uppercase" }}>{b.status==="countered" ? "counter" : "your rate"}</div>
                 </div>
               </div>
-              {b.status === "countered" && (
-                <button style={{ ...SL.primaryBtn, marginTop:10, padding:"10px 0", fontSize:13, background:"#7C3AED", color:"#fff" }}
-                  onClick={()=>{ setActiveBid(b); setSelectedHotel(b.hotel); setSelectedRoom(b.room); setCTL(secondsLeft(b)); setSideTab("browse"); setScreen("counter"); }}>
-                  View Counter Offer →
-                </button>
-              )}
+
+              {/* Timer (centered below info) + rate/taxes breakdown */}
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10, padding:"6px 0 4px" }}>
+                <TimerRing seconds={rem} total={total} size={88} />
+                <div style={{ fontSize:12, color:SL.sub, textAlign:"center" }}>
+                  Rate: <strong style={{ color:SL.ink }}>${rate}</strong>
+                  <span style={{ margin:"0 8px", color:SL.faint }}>·</span>
+                  Est. total: <strong style={{ color:SL.ink }}>${estTotal}</strong>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display:"flex", gap:8, marginTop:14 }}>
+                {b.status === "countered" && (
+                  <button style={{ ...SL.primaryBtn, flex:1, padding:"11px 0", fontSize:13, background:"#7C3AED", color:"#fff" }}
+                    onClick={()=>{ setActiveBid(b); setSelectedHotel(b.hotel); setSelectedRoom(b.room); setCTL(secondsLeft(b)); setSideTab("browse"); setScreen("counter"); }}>
+                    View Counter Offer →
+                  </button>
+                )}
+                {b.status === "pending" && (
+                  <button style={{ ...SL.ghostBtn, flex:1, padding:"11px 0", fontSize:13, color:"#B91C1C", borderColor:"#FCA5A5" }}
+                    onClick={()=>handleCancel(b.id)}>
+                    Cancel Request
+                  </button>
+                )}
+              </div>
             </div>
             );
           })
@@ -1343,18 +1406,18 @@ function HotelDashboard() {
 
   // ── Auth gate ──────────────────────────────────────────────────────────────
   if (session === undefined) {
-    return <div style={{ ...S.dashWrap, alignItems:"center", justifyContent:"center", color:"#475569" }}>Loading…</div>;
+    return <div style={{ ...SL.dashWrap, alignItems:"center", justifyContent:"center", color:"#6B7280" }}>Loading…</div>;
   }
   if (!session || !hotel) {
     return (
-      <div style={{ ...S.dashWrap, alignItems:"center", justifyContent:"center" }}>
+      <div style={{ ...SL.dashWrap, alignItems:"center", justifyContent:"center" }}>
         <div style={{ width:380, maxWidth:"90%" }}>
-          <div style={{ display:"flex", justifyContent:"center", marginBottom:18 }}><div style={S.logo}>LK</div></div>
+          <div style={{ display:"flex", justifyContent:"center", marginBottom:18 }}><div style={SL.logo}>LK</div></div>
           {session && !hotel ? (
-            <div style={S.emptyState}>
-              <div style={{ fontWeight:700, marginBottom:8 }}>No hotel linked to this account</div>
-              <div style={{ color:"#475569", fontSize:13, marginBottom:16 }}>This login isn&apos;t tied to a property yet. An admin must set <code>hotels.owner_user_id</code> to your user id.</div>
-              <button style={S.ghostBtn} onClick={onSignOut}>Sign Out</button>
+            <div style={SL.emptyState}>
+              <div style={{ fontWeight:700, marginBottom:8, color:"#1A1F2B" }}>No hotel linked to this account</div>
+              <div style={{ color:"#6B7280", fontSize:13, marginBottom:16 }}>This login isn&apos;t tied to a property yet. An admin must set <code>hotels.owner_user_id</code> to your user id.</div>
+              <button style={SL.ghostBtn} onClick={onSignOut}>Sign Out</button>
             </div>
           ) : (
             <PasswordLogin
@@ -1362,6 +1425,7 @@ function HotelDashboard() {
               title="Hotel sign in"
               blurb="Sign in with your property's email and password. You'll see live rate requests for your hotel only."
               onSignedIn={() => {}}
+              light
             />
           )}
         </div>
@@ -1370,70 +1434,70 @@ function HotelDashboard() {
   }
 
   return (
-    <div style={S.dashWrap}>
+    <div style={SL.dashWrap}>
       {notification && (
-        <div style={S.toast}>
-          <span style={S.toastDot} />
+        <div style={SL.toast}>
+          <span style={SL.toastDot} />
           <div>
-            <div style={{ fontWeight:600, fontSize:14 }}>New Rate Request</div>
-            <div style={{ fontSize:12, color:"#94A3B8", marginTop:2 }}>
+            <div style={{ fontWeight:700, fontSize:14, color:"#1A1F2B" }}>New Rate Request</div>
+            <div style={{ fontSize:12, color:"#6B7280", marginTop:2 }}>
               ${notification.amount} on {notification.room?.name} — {notification.guest?.name} (⭐ {notification.guest?.rating||"New"})
             </div>
           </div>
         </div>
       )}
 
-      <div style={S.sidebar}>
-        <div style={S.sidebarTop}>
-          <div style={S.logo}>LK</div>
+      <div style={SL.sidebar}>
+        <div style={SL.sidebarTop}>
+          <div style={SL.logo}>LK</div>
           <div style={{ marginTop:10 }}>
-            <div style={{ fontWeight:700, fontSize:13 }}>{hotel.name}</div>
-            <div style={{ fontSize:11, color:"#475569", marginTop:2 }}>Hotel Dashboard</div>
+            <div style={{ fontWeight:700, fontSize:13, color:"#1A1F2B" }}>{hotel.name}</div>
+            <div style={{ fontSize:11, color:"#9CA3AF", marginTop:2 }}>Hotel Dashboard</div>
           </div>
         </div>
-        <div style={S.sidebarNav}>
+        <div style={SL.sidebarNav}>
           {[
             { id:"live",    label:"Live Requests", count:liveBids.length },
-            { id:"history", label:"History",       count:histBids.length },
+            { id:"history", label:"Reservations",  count:histBids.length },
             { id:"kpi",     label:"KPIs & Analytics" },
             { id:"guests",  label:"Guest Profiles" },
             { id:"rooms",   label:"Room Settings" },
           ].map(tab => (
-            <button key={tab.id} style={{ ...S.navItem, ...(activeTab===tab.id?S.navActive:{}) }} onClick={()=>setActiveTab(tab.id)}>
+            <button key={tab.id} style={{ ...SL.navItem, ...(activeTab===tab.id?SL.navActive:{}) }} onClick={()=>setActiveTab(tab.id)}>
               {tab.label}
-              {tab.count > 0 && <span style={S.navBadge}>{tab.count}</span>}
+              {tab.count > 0 && <span style={SL.navBadge}>{tab.count}</span>}
             </button>
           ))}
         </div>
-        <div style={{ borderTop:"1px solid #1E293B", paddingTop:16, marginTop:"auto" }}>
-          <div style={{ fontSize:11, color:"#475569", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em" }}>Tonight</div>
+        <div style={{ borderTop:"1px solid #E5E7EB", paddingTop:16, marginTop:"auto" }}>
+          <div style={{ fontSize:11, color:"#9CA3AF", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:700 }}>Tonight</div>
           <div style={{ display:"flex", gap:14 }}>
             <div>
-              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color:"#F59E0B" }}>{accepted.length}</div>
-              <div style={{ fontSize:10, color:"#475569" }}>Accepted</div>
+              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color:"#B45309" }}>{accepted.length}</div>
+              <div style={{ fontSize:10, color:"#9CA3AF" }}>Accepted</div>
             </div>
             <div>
-              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color:"#22C55E" }}>${accepted.reduce((s,b)=>s+(b.counterAmount??b.amount),0)}</div>
-              <div style={{ fontSize:10, color:"#475569" }}>Revenue</div>
+              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color:"#15803D" }}>${accepted.reduce((s,b)=>s+(b.counterAmount??b.amount),0)}</div>
+              <div style={{ fontSize:10, color:"#9CA3AF" }}>Revenue</div>
             </div>
           </div>
-          <button style={{ ...S.ghostBtn, marginTop:14, fontSize:12, width:"100%", textAlign:"center" }} onClick={onSignOut}>Sign Out</button>
+          <button style={{ ...SL.ghostBtn, marginTop:14, fontSize:12, width:"100%", textAlign:"center" }} onClick={onSignOut}>Sign Out</button>
         </div>
       </div>
 
-      <div style={S.dashMain}>
+      <div style={SL.dashMain}>
 
         {activeTab === "live" && (
           <div>
-            <div style={S.dashSectionHead}>
-              <h2 style={S.dashTitle}>Live Requests</h2>
-              <span style={{ color:"#475569", fontSize:14 }}>Accept, decline, or send a counter offer. Bids below your floor auto-decline before they reach you.</span>
+            <div style={SL.dashSectionHead}>
+              <h2 style={SL.dashTitle}>Live Requests</h2>
+              <span style={{ color:"#6B7280", fontSize:14 }}>Accept, decline, or send a counter offer. Bids below your floor auto-decline before they reach you.</span>
             </div>
             {liveBids.length === 0
-              ? <div style={S.emptyState}>
+              ? <div style={SL.emptyState}>
                   <div style={{ fontSize:34, marginBottom:12 }}>⏳</div>
-                  <div style={{ fontWeight:600, marginBottom:6 }}>No active requests</div>
-                  <div style={{ color:"#475569", fontSize:13 }}>Bids from guests appear here in real time.</div>
+                  <div style={{ fontWeight:700, marginBottom:6, color:"#1A1F2B" }}>No active requests</div>
+                  <div style={{ color:"#6B7280", fontSize:13 }}>Bids from guests appear here in real time.</div>
                 </div>
               : liveBids.map(bid => {
                   const t = Math.max(0, Math.round((new Date(bid.expiresAt).getTime() - now)/1000));
@@ -1442,50 +1506,50 @@ function HotelDashboard() {
                   const aboveFloor = floor == null ? true : bid.amount >= floor;
                   const cv = counterInputs[bid.id] || "";
                   return (
-                    <div key={bid.id} style={{ ...S.bidCard, borderColor:aboveFloor?"#22C55E22":"#EF444422", marginBottom:16 }}>
+                    <div key={bid.id} style={{ ...SL.bidCard, borderColor:aboveFloor?"#86EFAC":"#FCA5A5", marginBottom:16 }}>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
                         <div>
-                          <div style={S.bidRoom}>{bid.room.name} <span style={{ color:"#475569", fontWeight:400, fontSize:14 }}>· {bid.room.type}</span></div>
-                          <div style={{ fontSize:12, color:"#475569", marginTop:2 }}>Ref: {bid.id.slice(0,8)}</div>
+                          <div style={SL.bidRoom}>{bid.room.name} <span style={{ color:"#9CA3AF", fontWeight:400, fontSize:14 }}>· {bid.room.type}</span></div>
+                          <div style={{ fontSize:12, color:"#9CA3AF", marginTop:2 }}>Ref: {bid.id.slice(0,8)}</div>
                           <div style={{ display:"flex", gap:8, alignItems:"center", marginTop:8, flexWrap:"wrap" }}>
                             <Badge status="pending" />
                             {floor != null && (aboveFloor
-                              ? <span style={{ fontSize:12, color:"#22C55E" }}>✓ Above floor (${floor})</span>
-                              : <span style={{ fontSize:12, color:"#EF4444" }}>✕ Below floor (${floor})</span>)}
+                              ? <span style={{ fontSize:12, color:"#15803D", fontWeight:600 }}>✓ Above floor (${floor})</span>
+                              : <span style={{ fontSize:12, color:"#B91C1C", fontWeight:600 }}>✕ Below floor (${floor})</span>)}
                           </div>
                         </div>
                         <div style={{ textAlign:"right" }}>
-                          <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:30, color:"#F59E0B" }}>${bid.amount}</div>
-                          <div style={{ fontSize:12, color:"#475569" }}>Rack: ${bid.room.rack}</div>
+                          <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:30, color:"#B45309" }}>${bid.amount}</div>
+                          <div style={{ fontSize:12, color:"#9CA3AF" }}>Rack: ${bid.room.rack}</div>
                         </div>
                       </div>
 
                       {bid.guest && (
                         <div style={{ marginBottom:14 }}>
-                          <button style={{ ...S.ghostBtn, fontSize:12, padding:"4px 10px", marginBottom:8 }}
+                          <button style={{ ...SL.ghostBtn, fontSize:12, padding:"5px 12px", marginBottom:8 }}
                             onClick={()=>setExpandedGuest(expandedGuest===bid.id?null:bid.id)}>
                             {expandedGuest===bid.id?"Hide":"View"} Guest Profile
                           </button>
-                          {expandedGuest===bid.id && <GuestProfileCard guest={bid.guest} compact />}
+                          {expandedGuest===bid.id && <GuestProfileCard guest={bid.guest} compact light />}
                         </div>
                       )}
 
-                      <div style={{ display:"flex", alignItems:"center", gap:16, paddingTop:14, borderTop:"1px solid #1E293B", flexWrap:"wrap" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:16, paddingTop:14, borderTop:"1px solid #E5E7EB", flexWrap:"wrap" }}>
                         <TimerRing seconds={t} size={80} />
                         <div style={{ flex:1, display:"flex", flexDirection:"column", gap:10, minWidth:200 }}>
                           <div style={{ display:"flex", gap:10 }}>
-                            <button style={{ ...S.decideBtn, background:"#22C55E", color:"#052E16", flex:1 }} onClick={()=>onDecide(bid.id,"accepted")}>Accept ${bid.amount}</button>
-                            <button style={{ ...S.decideBtn, background:"#1E293B", color:"#94A3B8", flex:1 }} onClick={()=>onDecide(bid.id,"declined")}>Decline</button>
+                            <button style={{ ...SL.decideBtn, background:"#16A34A", color:"#fff", flex:1 }} onClick={()=>onDecide(bid.id,"accepted")}>Accept ${bid.amount}</button>
+                            <button style={{ ...SL.decideBtn, background:"#F3F4F6", color:"#374151", border:"1px solid #D1D5DB", flex:1 }} onClick={()=>onDecide(bid.id,"declined")}>Decline</button>
                           </div>
                           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                            <span style={{ fontSize:12, color:"#64748B", flexShrink:0 }}>Counter at</span>
-                            <div style={{ display:"flex", alignItems:"center", background:"#1E293B", borderRadius:7, padding:"0 10px", flex:1 }}>
-                              <span style={{ color:"#64748B" }}>$</span>
+                            <span style={{ fontSize:12, color:"#6B7280", flexShrink:0, fontWeight:600 }}>Counter at</span>
+                            <div style={{ display:"flex", alignItems:"center", background:"#fff", border:"1px solid #D1D5DB", borderRadius:8, padding:"0 10px", flex:1 }}>
+                              <span style={{ color:"#9CA3AF" }}>$</span>
                               <input type="number" placeholder="amount" value={cv}
                                 onChange={e=>setCounterInputs(p=>({...p,[bid.id]:e.target.value}))}
-                                style={{ background:"none", border:"none", outline:"none", color:"#F7F5F0", fontSize:15, fontWeight:600, fontFamily:"Space Grotesk,sans-serif", width:"100%", padding:"8px 6px" }} />
+                                style={{ background:"none", border:"none", outline:"none", color:"#1A1F2B", fontSize:15, fontWeight:700, fontFamily:"Space Grotesk,sans-serif", width:"100%", padding:"8px 6px" }} />
                             </div>
-                            <button style={{ ...S.decideBtn, background:"#A78BFA", color:"#1E0A2E", padding:"10px 14px", flexShrink:0, opacity:!cv?0.4:1 }}
+                            <button style={{ ...SL.decideBtn, background:"#7C3AED", color:"#fff", padding:"10px 14px", flexShrink:0, opacity:!cv?0.4:1 }}
                               disabled={!cv}
                               onClick={()=>{ onCounter(bid.id, parseInt(cv)); setCounterInputs(p=>({...p,[bid.id]:""})); }}>
                               Send Counter
@@ -1502,31 +1566,38 @@ function HotelDashboard() {
 
         {activeTab === "history" && (
           <div>
-            <div style={S.dashSectionHead}>
-              <h2 style={S.dashTitle}>History</h2>
-              <span style={{ color:"#475569", fontSize:14 }}>Tap a day to see its requests. The selected day also drives KPIs.</span>
+            <div style={SL.dashSectionHead}>
+              <h2 style={SL.dashTitle}>Reservations</h2>
+              <span style={{ color:"#6B7280", fontSize:14 }}>Tap a day to see its requests. The selected day also drives KPIs.</span>
             </div>
-            <BookingCalendar bids={bids} selectedDate={selectedDate} onSelect={setSelectedDate} />
-            <div style={S.sectionLabel}>{shortDate(selectedDate)} · {dayBids.length} request{dayBids.length===1?"":"s"}</div>
+            <BookingCalendar light bids={bids} selectedDate={selectedDate} onSelect={setSelectedDate} />
+            <div style={SL.sectionLabel}>{shortDate(selectedDate)} · {dayBids.length} request{dayBids.length===1?"":"s"}</div>
             {dayBids.length === 0
-              ? <div style={S.emptyState}><div style={{ color:"#475569", fontSize:13 }}>No requests on this day.</div></div>
-              : <div style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:14, overflow:"hidden" }}>
-                  <div style={{ display:"grid", gridTemplateColumns:"2fr 1.5fr 0.8fr 0.8fr 1fr 1.2fr", padding:"12px 20px", background:"#0A0F1E", fontSize:11, color:"#475569", letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:600 }}>
-                    <span>Guest</span><span>Room</span><span>Bid</span><span>Rack</span><span>Rating</span><span>Status</span>
-                  </div>
-                  {dayBids.map(b => (
-                    <div key={b.id} style={{ display:"grid", gridTemplateColumns:"2fr 1.5fr 0.8fr 0.8fr 1fr 1.2fr", padding:"14px 20px", borderTop:"1px solid #1E293B", alignItems:"center" }}>
-                      <span>
-                        <div style={{ fontWeight:600, fontSize:14 }}>{b.guest?.name||"Guest"}</div>
-                        <div style={{ fontSize:11, color:"#475569" }}>{b.id.slice(0,8)}</div>
-                      </span>
-                      <span style={{ fontSize:13, color:"#94A3B8" }}>{b.room.name}</span>
-                      <span style={{ fontWeight:700, color:["accepted","handled"].includes(b.status)?"#22C55E":"#F7F5F0" }}>${b.counterAmount ?? b.amount}</span>
-                      <span style={{ fontSize:13, color:"#475569" }}>${b.room.rack}</span>
-                      <span style={{ fontSize:13 }}>{b.guest?.rating?`${b.guest.rating} ★`:"New"}</span>
-                      <span><Badge status={effectiveStatus(b)} /></span>
-                    </div>
-                  ))}
+              ? <div style={SL.emptyState}><div style={{ color:"#6B7280", fontSize:13 }}>No requests on this day.</div></div>
+              : <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                  {dayBids.map(b => {
+                    const st = effectiveStatus(b);
+                    const amount = b.counterAmount ?? b.amount;
+                    return (
+                      <div key={b.id} style={{ ...SL.panel, padding:16, display:"flex", gap:14, flexWrap:"wrap", alignItems:"center" }}>
+                        <div style={{ flex:1, minWidth:220 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                            <span style={{ fontWeight:700, fontSize:15, color:"#1A1F2B" }}>{b.guest?.name || "Guest"}</span>
+                            <span style={{ fontSize:12, color:"#9CA3AF" }}>{b.guest?.rating ? `${b.guest.rating} ★ · ${b.guest.stays} stays` : "New guest"}</span>
+                          </div>
+                          <div style={{ fontSize:13, color:"#6B7280", marginTop:4 }}>{b.room.name} <span style={{ color:"#9CA3AF" }}>· Rack ${b.room.rack}</span></div>
+                          <div style={{ fontSize:12, color:"#9CA3AF", marginTop:4 }}>Check-in: {shortDate(b.stayDate)} · Ref {b.id.slice(0,8)}</div>
+                          {["accepted","handled"].includes(b.status) && b.confirmationCode && (
+                            <div style={{ fontSize:12, marginTop:4, color:"#047857" }}>Confirmation: <strong style={{ fontFamily:"monospace" }}>{b.confirmationCode}</strong></div>
+                          )}
+                        </div>
+                        <div style={{ textAlign:"right" }}>
+                          <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color: ["accepted","handled"].includes(b.status) ? "#15803D" : "#1A1F2B" }}>${amount}</div>
+                          <div style={{ marginTop:6 }}><Badge status={st} /></div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
             }
           </div>
@@ -1534,15 +1605,15 @@ function HotelDashboard() {
 
         {activeTab === "kpi" && (
           <div>
-            <div style={{ ...S.dashSectionHead, display:"flex", justifyContent:"space-between", alignItems:"flex-end", flexWrap:"wrap", gap:12 }}>
+            <div style={{ ...SL.dashSectionHead, display:"flex", justifyContent:"space-between", alignItems:"flex-end", flexWrap:"wrap", gap:12 }}>
               <div>
-                <h2 style={S.dashTitle}>KPIs &amp; Analytics</h2>
-                <span style={{ color:"#475569", fontSize:14 }}>Figures for the selected day.</span>
+                <h2 style={SL.dashTitle}>KPIs &amp; Analytics</h2>
+                <span style={{ color:"#6B7280", fontSize:14 }}>Figures for the selected day.</span>
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                <span style={{ fontSize:12, color:"#64748B" }}>Date</span>
+                <span style={{ fontSize:12, color:"#6B7280", fontWeight:600 }}>Date</span>
                 <input type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)}
-                  style={{ ...S.field, width:"auto", padding:"8px 10px", colorScheme:"dark" }} />
+                  style={{ ...SL.field, width:"auto", padding:"8px 10px" }} />
               </div>
             </div>
             <KPIPanel bids={dayBids} totalRooms={rooms.length} dateLabel={shortDate(selectedDate)} />
@@ -1551,114 +1622,114 @@ function HotelDashboard() {
 
         {activeTab === "guests" && (
           <div>
-            <div style={S.dashSectionHead}>
-              <h2 style={S.dashTitle}>Guest Profiles</h2>
-              <span style={{ color:"#475569", fontSize:14 }}>Ratings only — no names or demographics. Protects against discrimination claims.</span>
+            <div style={SL.dashSectionHead}>
+              <h2 style={SL.dashTitle}>Guest Profiles</h2>
+              <span style={{ color:"#6B7280", fontSize:14 }}>Ratings only — no names or demographics. Protects against discrimination claims.</span>
             </div>
-            <div style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:14, padding:"16px 20px", marginBottom:18 }}>
-              <div style={{ fontSize:13, color:"#64748B", lineHeight:1.7 }}>
-                <strong style={{ color:"#94A3B8" }}>How this works:</strong> Every guest builds a rating across all LastKey stays. When a bid arrives you see their star rating and stay count — nothing else. No name, no demographics, no photo. Bad actors get filtered by behavior, not appearance.
+            <div style={{ ...SL.panel, padding:"16px 20px", marginBottom:18 }}>
+              <div style={{ fontSize:13, color:"#6B7280", lineHeight:1.7 }}>
+                <strong style={{ color:"#1A1F2B" }}>How this works:</strong> Every guest builds a rating across all LastKey stays. When a bid arrives you see their star rating and stay count — nothing else. No name, no demographics, no photo. Bad actors get filtered by behavior, not appearance.
               </div>
             </div>
             {[...new Map(bids.filter(b=>b.guest).map(b=>[b.guest.email, b.guest])).values()].map(guest => (
-              <div key={guest.email} style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:12, padding:"16px 18px", marginBottom:10 }}>
+              <div key={guest.email} style={{ ...SL.panel, padding:"16px 18px", marginBottom:10 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-                  <div style={{ width:46, height:46, borderRadius:"50%", background:"#1E3A5F", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:17, color:"#F59E0B" }}>
+                  <div style={{ width:46, height:46, borderRadius:"50%", background:"#FEF3E2", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:17, color:"#B45309" }}>
                     {(guest.name||"?").split(" ").map(n=>n[0]).join("")}
                   </div>
                   <div style={{ flex:1 }}>
                     <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                      <span style={{ fontWeight:700 }}>{guest.name}</span>
-                      {guest.verified && <span style={{ fontSize:10, background:"#052E16", color:"#22C55E", padding:"2px 6px", borderRadius:4, fontWeight:600 }}>✓ Verified</span>}
+                      <span style={{ fontWeight:700, color:"#1A1F2B" }}>{guest.name}</span>
+                      {guest.verified && <span style={{ fontSize:10, background:"#D1FAE5", color:"#047857", padding:"2px 6px", borderRadius:4, fontWeight:700 }}>✓ Verified</span>}
                     </div>
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:4 }}>
                       <StarDisplay rating={guest.rating} />
-                      <span style={{ fontSize:12, color:"#94A3B8" }}>{guest.rating>0?guest.rating.toFixed(1):"No rating"} · {guest.stays} stays</span>
+                      <span style={{ fontSize:12, color:"#6B7280" }}>{guest.rating>0?guest.rating.toFixed(1):"No rating"} · {guest.stays} stays</span>
                     </div>
                   </div>
-                  <div style={{ fontSize:12, color:"#475569", textAlign:"right" }}>
+                  <div style={{ fontSize:12, color:"#9CA3AF", textAlign:"right" }}>
                     {bids.filter(b=>b.guest?.email===guest.email).length} bid(s)
                   </div>
                 </div>
               </div>
             ))}
-            {bids.filter(b=>b.guest).length===0 && <div style={S.emptyState}><div style={{ color:"#475569", fontSize:13 }}>Guest profiles appear when bids are submitted.</div></div>}
+            {bids.filter(b=>b.guest).length===0 && <div style={SL.emptyState}><div style={{ color:"#6B7280", fontSize:13 }}>Guest profiles appear when bids are submitted.</div></div>}
           </div>
         )}
 
         {activeTab === "rooms" && (
           <div>
-            <div style={{ ...S.dashSectionHead, display:"flex", justifyContent:"space-between", alignItems:"flex-end", flexWrap:"wrap", gap:12 }}>
+            <div style={{ ...SL.dashSectionHead, display:"flex", justifyContent:"space-between", alignItems:"flex-end", flexWrap:"wrap", gap:12 }}>
               <div>
-                <h2 style={S.dashTitle}>Room Settings</h2>
-                <span style={{ color:"#475569", fontSize:14 }}>Manage inventory, rack rate, bid floor, and room types. Floors are never shown to guests.</span>
+                <h2 style={SL.dashTitle}>Room Settings</h2>
+                <span style={{ color:"#6B7280", fontSize:14 }}>Manage inventory, rack rate, bid floor, and room types. Floors are never shown to guests.</span>
               </div>
-              <button style={{ ...S.submitBtn, width:"auto", padding:"10px 16px" }} onClick={()=>setShowAdd(s=>!s)}>
+              <button style={{ ...SL.submitBtn, width:"auto", padding:"10px 16px" }} onClick={()=>setShowAdd(s=>!s)}>
                 {showAdd ? "Close" : "+ Add Room Type"}
               </button>
             </div>
 
             {showAdd && (
-              <div style={{ ...S.formCard, marginBottom:16 }}>
-                <div style={S.formTitle}>New Room Type</div>
+              <div style={{ ...SL.formCard, marginBottom:16 }}>
+                <div style={SL.formTitle}>New Room Type</div>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:10, marginTop:10 }}>
-                  <input style={S.field} placeholder="Name (e.g. King Room)" value={newRoom.name} onChange={e=>setNewRoom(p=>({...p,name:e.target.value}))} />
-                  <input style={S.field} placeholder="Type (e.g. King · Standard)" value={newRoom.room_type} onChange={e=>setNewRoom(p=>({...p,room_type:e.target.value}))} />
-                  <input style={S.field} type="number" placeholder="Rack rate $" value={newRoom.rack_rate} onChange={e=>setNewRoom(p=>({...p,rack_rate:e.target.value}))} />
-                  <input style={S.field} type="number" placeholder="Bid floor $" value={newRoom.bid_floor} onChange={e=>setNewRoom(p=>({...p,bid_floor:e.target.value}))} />
-                  <input style={S.field} type="number" placeholder="Inventory count" value={newRoom.inventory_count} onChange={e=>setNewRoom(p=>({...p,inventory_count:e.target.value}))} />
-                  <input style={S.field} placeholder="Amenities (comma separated)" value={newRoom.amenities} onChange={e=>setNewRoom(p=>({...p,amenities:e.target.value}))} />
+                  <input style={SL.field} placeholder="Name (e.g. King Room)" value={newRoom.name} onChange={e=>setNewRoom(p=>({...p,name:e.target.value}))} />
+                  <input style={SL.field} placeholder="Type (e.g. King · Standard)" value={newRoom.room_type} onChange={e=>setNewRoom(p=>({...p,room_type:e.target.value}))} />
+                  <input style={SL.field} type="number" placeholder="Rack rate $" value={newRoom.rack_rate} onChange={e=>setNewRoom(p=>({...p,rack_rate:e.target.value}))} />
+                  <input style={SL.field} type="number" placeholder="Bid floor $" value={newRoom.bid_floor} onChange={e=>setNewRoom(p=>({...p,bid_floor:e.target.value}))} />
+                  <input style={SL.field} type="number" placeholder="Inventory count" value={newRoom.inventory_count} onChange={e=>setNewRoom(p=>({...p,inventory_count:e.target.value}))} />
+                  <input style={SL.field} placeholder="Amenities (comma separated)" value={newRoom.amenities} onChange={e=>setNewRoom(p=>({...p,amenities:e.target.value}))} />
                 </div>
-                <button style={{ ...S.submitBtn, marginTop:14 }} onClick={onAddRoom}>Create Room Type</button>
+                <button style={{ ...SL.submitBtn, marginTop:14 }} onClick={onAddRoom}>Create Room Type</button>
               </div>
             )}
 
-            {rooms.length === 0 && <div style={S.emptyState}><div style={{ color:"#475569", fontSize:13 }}>No room types yet. Add one above.</div></div>}
+            {rooms.length === 0 && <div style={SL.emptyState}><div style={{ color:"#6B7280", fontSize:13 }}>No room types yet. Add one above.</div></div>}
 
             {rooms.map(room => (
-              <div key={room.id} style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:14, padding:18, display:"flex", gap:16, alignItems:"center", marginBottom:14, flexWrap:"wrap" }}>
+              <div key={room.id} style={SL.roomSetCard}>
                 <div style={{ width:120, flexShrink:0 }}><ImageOrIcon url={room.imageUrl} type={room.image} height={84} /></div>
                 <div style={{ flex:1, minWidth:160 }}>
-                  <div style={{ fontWeight:700, fontSize:16 }}>{room.name}</div>
-                  <div style={{ fontSize:13, color:"#475569", marginTop:2 }}>{room.type}</div>
-                  <div style={S.amenityRow}>{room.amenities.map(a=><span key={a} style={S.amenityTag}>{a}</span>)}</div>
-                  <button style={{ ...S.ghostBtn, fontSize:12, padding:"5px 10px", marginTop:4, color:"#EF4444", borderColor:"#3B0000" }} onClick={()=>onRemoveRoom(room.id)}>Remove</button>
+                  <div style={{ fontWeight:700, fontSize:16, color:"#1A1F2B" }}>{room.name}</div>
+                  <div style={{ fontSize:13, color:"#9CA3AF", marginTop:2 }}>{room.type}</div>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8, marginBottom:8 }}>{room.amenities.map(a=><span key={a} style={SL.amenityTag}>{a}</span>)}</div>
+                  <button style={{ ...SL.ghostBtn, fontSize:12, padding:"5px 10px", marginTop:4, color:"#B91C1C", borderColor:"#FCA5A5" }} onClick={()=>onRemoveRoom(room.id)}>Remove</button>
                 </div>
 
                 {/* Inventory */}
                 <div style={{ minWidth:120, textAlign:"center" }}>
-                  <div style={S.settingLabel}>Inventory</div>
+                  <div style={SL.settingLabel}>Inventory</div>
                   <div style={{ display:"flex", alignItems:"center", gap:8, justifyContent:"center" }}>
-                    <button style={S.stepBtn} onClick={()=>onInventory(room.id,-1)} disabled={(room.inventoryCount??0)<=0}>−</button>
-                    <span style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:22, minWidth:28 }}>{room.inventoryCount ?? 0}</span>
-                    <button style={S.stepBtn} onClick={()=>onInventory(room.id,1)}>+</button>
+                    <button style={SL.stepBtn} onClick={()=>onInventory(room.id,-1)} disabled={(room.inventoryCount??0)<=0}>−</button>
+                    <span style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:22, minWidth:28, color:"#1A1F2B" }}>{room.inventoryCount ?? 0}</span>
+                    <button style={SL.stepBtn} onClick={()=>onInventory(room.id,1)}>+</button>
                   </div>
-                  <div style={{ fontSize:11, color:(room.inventoryCount??0)>0?"#22C55E":"#EF4444", marginTop:6 }}>{(room.inventoryCount??0)>0?"Available":"Sold out / hidden"}</div>
+                  <div style={{ fontSize:11, color:(room.inventoryCount??0)>0?"#15803D":"#B91C1C", marginTop:6, fontWeight:600 }}>{(room.inventoryCount??0)>0?"Available":"Sold out / hidden"}</div>
                 </div>
 
                 {/* Rack rate */}
                 <div style={{ minWidth:130 }}>
-                  <div style={S.settingLabel}>Rack Rate</div>
+                  <div style={SL.settingLabel}>Rack Rate</div>
                   <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                    <span style={{ color:"#64748B" }}>$</span>
+                    <span style={{ color:"#9CA3AF" }}>$</span>
                     <input type="number" value={rackInputs[room.id] ?? room.rack}
                       onChange={e=>setRackInputs(p=>({...p,[room.id]:e.target.value}))}
-                      style={S.settingInput} />
-                    <button style={S.settingSet} onClick={()=>onSaveRack(room.id)}>Set</button>
+                      style={SL.settingInput} />
+                    <button style={SL.settingSet} onClick={()=>onSaveRack(room.id)}>Set</button>
                   </div>
                 </div>
 
                 {/* Bid floor */}
                 <div style={{ minWidth:140 }}>
-                  <div style={S.settingLabel}>Bid Floor (hidden)</div>
+                  <div style={SL.settingLabel}>Bid Floor (hidden)</div>
                   <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                    <span style={{ color:"#64748B" }}>$</span>
+                    <span style={{ color:"#9CA3AF" }}>$</span>
                     <input type="number" value={floorInputs[room.id] ?? (room.floor_price ?? "")}
                       onChange={e=>setFloorInputs(p=>({...p,[room.id]:e.target.value}))}
-                      style={S.settingInput} />
-                    <button style={S.settingSet} onClick={()=>onSetFloor(room.id)}>Set</button>
+                      style={SL.settingInput} />
+                    <button style={SL.settingSet} onClick={()=>onSetFloor(room.id)}>Set</button>
                   </div>
-                  <div style={{ fontSize:11, color:"#22C55E", marginTop:6 }}>Active: ${room.floor_price ?? "—"}</div>
+                  <div style={{ fontSize:11, color:"#15803D", marginTop:6, fontWeight:600 }}>Active: ${room.floor_price ?? "—"}</div>
                 </div>
               </div>
             ))}
@@ -1780,4 +1851,25 @@ const SL = {
   navActive:    { background:"#FEF3E2", color:"#B45309" },
   navBadge:     { background:"#F59E0B", color:"#0A0F1E", fontSize:10, fontWeight:700, padding:"2px 6px", borderRadius:8 },
   logo:         { width:38, height:38, borderRadius:10, background:"#F59E0B", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:13, color:"#0A0F1E", flexShrink:0 },
+  // hotel dashboard (light)
+  dashWrap:       { height:"100vh", background:"#F4F5F7", color:"#1A1F2B", fontFamily:"Inter,sans-serif", display:"flex", overflow:"hidden" },
+  sidebarTop:     { marginBottom:22 },
+  sidebarNav:     { display:"flex", flexDirection:"column", gap:2, flex:1 },
+  dashMain:       { flex:1, padding:"26px 30px", overflowY:"auto" },
+  dashSectionHead:{ marginBottom:22 },
+  dashTitle:      { fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:22, margin:"0 0 4px", color:"#1A1F2B" },
+  bidCard:        { background:"#fff", border:"1px solid #E5E7EB", borderRadius:16, padding:20, boxShadow:"0 1px 3px rgba(0,0,0,0.06)" },
+  bidRoom:        { fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:17, color:"#1A1F2B" },
+  decideBtn:      { padding:"11px 16px", borderRadius:10, border:"none", cursor:"pointer", fontFamily:"Inter,sans-serif", fontWeight:700, fontSize:14 },
+  settingLabel:   { fontSize:11, color:"#9CA3AF", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:600 },
+  settingInput:   { width:64, background:"#fff", border:"1px solid #D1D5DB", borderRadius:8, padding:"7px 10px", color:"#1A1F2B", fontSize:16, fontWeight:700, fontFamily:"Space Grotesk,sans-serif", outline:"none", textAlign:"center" },
+  settingSet:     { padding:"9px 12px", background:"#F59E0B", color:"#0A0F1E", border:"none", borderRadius:8, fontWeight:700, fontSize:12, fontFamily:"Inter,sans-serif", cursor:"pointer" },
+  stepBtn:        { width:32, height:32, borderRadius:8, border:"1px solid #D1D5DB", background:"#fff", color:"#1A1F2B", fontSize:18, fontWeight:700, cursor:"pointer", lineHeight:1 },
+  toast:          { position:"fixed", top:24, left:"50%", transform:"translateX(-50%)", background:"#fff", border:"1px solid #22C55E", borderRadius:12, padding:"14px 18px", display:"flex", gap:12, alignItems:"flex-start", zIndex:2000, boxShadow:"0 12px 32px rgba(0,0,0,0.15)", fontFamily:"Inter,sans-serif", color:"#1A1F2B", minWidth:280 },
+  toastDot:       { width:8, height:8, borderRadius:"50%", background:"#22C55E", marginTop:4, flexShrink:0 },
+  emptyState:     { background:"#fff", border:"1px solid #E5E7EB", borderRadius:16, padding:"44px 28px", textAlign:"center", boxShadow:"0 1px 3px rgba(0,0,0,0.06)" },
+  formCard:       { background:"#fff", border:"1px solid #E5E7EB", borderRadius:16, padding:20, boxShadow:"0 1px 3px rgba(0,0,0,0.06)" },
+  formTitle:      { fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, marginBottom:6, color:"#1A1F2B" },
+  submitBtn:      { width:"100%", padding:"13px 0", background:"#F59E0B", color:"#0A0F1E", border:"none", borderRadius:12, fontWeight:700, fontSize:15, fontFamily:"Inter,sans-serif", cursor:"pointer", display:"block" },
+  roomSetCard:    { background:"#fff", border:"1px solid #E5E7EB", borderRadius:14, padding:18, display:"flex", gap:16, alignItems:"center", marginBottom:14, flexWrap:"wrap", boxShadow:"0 1px 3px rgba(0,0,0,0.06)" },
 };
