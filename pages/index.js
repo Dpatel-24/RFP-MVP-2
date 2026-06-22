@@ -207,54 +207,126 @@ function PasswordLogin({ title, eyebrow, blurb, onSignedIn }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HOTEL DISCOVERY LISTING
+// HOTEL DISCOVERY LISTING  (light, Figma wireframe layout — Home/browse only)
 // ─────────────────────────────────────────────────────────────────────────────
+const HERO_FALLBACK = "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1600&q=80";
+const PROPERTY_TABS = ["Rooms", "Flats", "Hostels", "Villas"];
+
 function HotelListingView({ onSelectHotel, hotelsWithRooms }) {
+  const [query, setQuery] = useState("");
+  const heroBg = hotelsWithRooms.find(h => h.heroImage)?.heroImage || HERO_FALLBACK;
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? hotelsWithRooms.filter(h =>
+        [h.name, h.city, h.location].filter(Boolean).some(v => v.toLowerCase().includes(q)))
+    : hotelsWithRooms;
+
   return (
-    <div>
-      <div style={S.heroBox}>
-        <div style={S.heroEyebrow}>Tonight Only · Live Availability</div>
-        <h1 style={{ ...S.heroTitle, fontSize:26 }}>Hotels available now</h1>
-        <p style={S.heroSub}>Only hotels with unsold rooms tonight are listed. Submit a private rate request — response in 10 min.</p>
+    <div style={{ background:"#F4F5F7", color:"#1A1F2B", fontFamily:"Inter,sans-serif", minHeight:"100vh" }}>
+      {/* Hero */}
+      <div style={{ position:"relative", padding:"0 0 64px" }}>
+        <div style={{ position:"absolute", inset:0, backgroundImage:`url(${heroBg})`, backgroundSize:"cover", backgroundPosition:"center" }} />
+        <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, rgba(10,15,30,0.55) 0%, rgba(10,15,30,0.35) 45%, rgba(244,245,247,1) 100%)" }} />
+        <div style={{ position:"relative", maxWidth:1080, margin:"0 auto", padding:"64px 24px 0", textAlign:"center", color:"#fff" }}>
+          <h1 style={{ fontFamily:"Space Grotesk,sans-serif", fontSize:40, fontWeight:700, letterSpacing:"-1px", margin:"0 0 12px", lineHeight:1.1 }}>
+            Find tonight&apos;s room
+          </h1>
+          <p style={{ fontSize:16, color:"rgba(255,255,255,0.9)", margin:"0 auto 28px", maxWidth:520, lineHeight:1.5 }}>
+            Name your rate at hotels with unsold rooms tonight. A private response in 10 minutes.
+          </p>
+
+          {/* Property-type tabs */}
+          <div style={{ display:"inline-flex", gap:28, marginBottom:18 }}>
+            {PROPERTY_TABS.map((t) => {
+              const active = t === "Rooms";
+              return (
+                <span key={t} title={active ? "" : "Coming soon"}
+                  style={{ fontSize:14, fontWeight:600, paddingBottom:6, cursor: active ? "default" : "not-allowed",
+                    color: active ? "#fff" : "rgba(255,255,255,0.55)",
+                    borderBottom: active ? "2px solid #F59E0B" : "2px solid transparent" }}>
+                  {t}
+                </span>
+              );
+            })}
+          </div>
+
+          {/* Search bar */}
+          <div style={SL.searchBar}>
+            <div style={{ flex:2, textAlign:"left", padding:"0 18px" }}>
+              <div style={SL.searchLabel}>Location</div>
+              <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Which city do you prefer?" style={SL.searchInput} />
+            </div>
+            <div style={SL.searchDivider} />
+            <div style={{ flex:1.4, textAlign:"left", padding:"0 18px" }}>
+              <div style={SL.searchLabel}>Check In · Check Out</div>
+              <div style={SL.searchValue}>Tonight → tomorrow 11:00 AM</div>
+            </div>
+            <button onClick={()=>{}} style={SL.searchBtn} aria-label="Search">🔍</button>
+          </div>
+        </div>
       </div>
-      <div style={S.sectionLabel}>{hotelsWithRooms.length} hotels · New Orleans Area</div>
-      <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-        {hotelsWithRooms.map(hotel => (
-          <div key={hotel.id} style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:14, overflow:"hidden", cursor:"pointer" }}
-            onClick={() => onSelectHotel(hotel)}>
-            {hotel.heroImage && (
-              <img src={hotel.heroImage} alt="" loading="lazy"
-                style={{ width:"100%", height:150, objectFit:"cover", display:"block" }} />
-            )}
-            <div style={{ padding:"16px 18px 0" }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-                <div>
-                  <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16 }}>{hotel.name}</div>
-                  <div style={{ fontSize:12, color:"#475569", marginTop:2 }}>{hotel.location}</div>
-                  <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:5 }}>
-                    <StarDisplay rating={hotel.rating} />
-                    <span style={{ fontSize:12, color:"#94A3B8" }}>{hotel.rating} ({hotel.reviewCount})</span>
+
+      {/* Listing grid */}
+      <div style={{ maxWidth:1080, margin:"0 auto", padding:"8px 24px 56px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:18 }}>
+          <h2 style={{ fontFamily:"Space Grotesk,sans-serif", fontSize:22, fontWeight:700, margin:0 }}>Available tonight</h2>
+          <span style={{ fontSize:13, color:"#6B7280" }}>{filtered.length} hotel{filtered.length===1?"":"s"} · New Orleans Area</span>
+        </div>
+
+        {filtered.length === 0 ? (
+          <div style={{ background:"#fff", border:"1px solid #E5E7EB", borderRadius:16, padding:"48px 24px", textAlign:"center", color:"#6B7280" }}>
+            No hotels match “{query}”. Try another city or name.
+          </div>
+        ) : (
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(300px, 1fr))", gap:22 }}>
+            {filtered.map(hotel => {
+              const fromPrice = Math.min(...hotel.rooms.map(r=>r.rack));
+              return (
+                <div key={hotel.id} style={SL.card} onClick={() => onSelectHotel(hotel)}
+                  onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 10px 30px rgba(0,0,0,0.12)"; e.currentTarget.style.transform="translateY(-2px)";}}
+                  onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,0.06)"; e.currentTarget.style.transform="none";}}>
+                  <div style={{ position:"relative" }}>
+                    <img src={hotel.heroImage || HERO_FALLBACK} alt="" loading="lazy"
+                      style={{ width:"100%", height:190, objectFit:"cover", display:"block" }} />
+                    <span style={SL.tonightTag}>{hotel.rooms.length} room{hotel.rooms.length>1?"s":""} left tonight</span>
+                  </div>
+                  <div style={{ padding:"14px 16px 16px" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10 }}>
+                      <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16, lineHeight:1.25 }}>{hotel.name}</div>
+                      <div style={{ textAlign:"right", flexShrink:0 }}>
+                        <div style={{ fontSize:11, color:"#9CA3AF" }}>from</div>
+                        <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color:"#0F766E" }}>${fromPrice}</div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize:13, color:"#6B7280", marginTop:3 }}>📍 {hotel.location}</div>
+                    <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8 }}>
+                      <StarDisplay rating={hotel.rating} />
+                      <span style={{ fontSize:12, color:"#6B7280" }}>{hotel.rating} ({hotel.reviewCount} reviews)</span>
+                    </div>
                   </div>
                 </div>
-                <div style={{ textAlign:"right" }}>
-                  <div style={{ fontSize:11, color:"#475569" }}>From</div>
-                  <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:22 }}>${Math.min(...hotel.rooms.map(r=>r.rack))}</div>
-                  <div style={{ fontSize:11, color:"#475569" }}>rack</div>
-                </div>
-              </div>
-              <div style={{ fontSize:12, color:"#64748B", marginTop:7, fontStyle:"italic" }}>{hotel.tagline}</div>
-            </div>
-            <div style={{ display:"flex", gap:8, padding:"12px 18px", borderTop:"1px solid #0A0F1E", marginTop:12 }}>
-              <span style={{ fontSize:11, color:"#22C55E", background:"#052E16", padding:"3px 8px", borderRadius:4, fontWeight:600 }}>
-                {hotel.rooms.length} room{hotel.rooms.length>1?"s":""} available
-              </span>
-              <span style={{ fontSize:11, color:"#F59E0B", background:"#451A03", padding:"3px 8px", borderRadius:4, fontWeight:600 }}>
-                10-min response
-              </span>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <footer style={{ background:"#0F172A", color:"#94A3B8", padding:"32px 24px" }}>
+        <div style={{ maxWidth:1080, margin:"0 auto", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:16 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+            <div style={S.logo}>LK</div>
+            <div>
+              <div style={{ color:"#F7F5F0", fontWeight:700, fontSize:14 }}>LastKey</div>
+              <div style={{ fontSize:12 }}>Private rate requests · tonight only</div>
             </div>
           </div>
-        ))}
-      </div>
+          <div style={{ display:"flex", gap:22, fontSize:13 }}>
+            <span>How it works</span><span>Support</span><span>Privacy</span><span>Terms</span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
@@ -674,7 +746,7 @@ function GuestView() {
         )}
       </div>
 
-      <div style={{ flex:1, overflowY:"auto", padding:"28px 28px 60px" }}>
+      <div style={{ flex:1, overflowY:"auto", padding: (!showPanel && screen==="listing") ? 0 : "28px 28px 60px" }}>
         {showPanel ? renderSideContent() : renderMain()}
       </div>
     </div>
@@ -1351,4 +1423,16 @@ const S = {
   stepBtn:        { width:32, height:32, borderRadius:8, border:"1px solid #2D3F55", background:"#1E293B", color:"#F7F5F0", fontSize:18, fontWeight:700, cursor:"pointer", lineHeight:1 },
   toast:          { position:"fixed", top:24, left:"50%", transform:"translateX(-50%)", background:"#0F172A", border:"1px solid #22C55E", borderRadius:12, padding:"14px 18px", display:"flex", gap:12, alignItems:"flex-start", zIndex:2000, boxShadow:"0 8px 32px rgba(0,0,0,0.5)", fontFamily:"Inter,sans-serif", color:"#F7F5F0", minWidth:280 },
   toastDot:       { width:8, height:8, borderRadius:"50%", background:"#22C55E", marginTop:4, flexShrink:0, animation:"pulse 1.5s infinite" },
+};
+
+// Light styles — used only by the guest Home/browse page (HotelListingView).
+const SL = {
+  searchBar:    { display:"flex", alignItems:"center", background:"#fff", borderRadius:14, boxShadow:"0 12px 40px rgba(0,0,0,0.25)", maxWidth:760, margin:"0 auto", padding:"12px 12px 12px 0", color:"#1A1F2B" },
+  searchLabel:  { fontSize:11, fontWeight:700, color:"#1A1F2B", marginBottom:2 },
+  searchInput:  { border:"none", outline:"none", fontSize:14, color:"#1A1F2B", width:"100%", fontFamily:"Inter,sans-serif", background:"transparent" },
+  searchValue:  { fontSize:14, color:"#6B7280" },
+  searchDivider:{ width:1, height:34, background:"#E5E7EB" },
+  searchBtn:    { width:50, height:50, borderRadius:"50%", border:"none", background:"#F59E0B", color:"#0A0F1E", fontSize:18, cursor:"pointer", flexShrink:0, marginLeft:8 },
+  card:         { background:"#fff", border:"1px solid #E5E7EB", borderRadius:16, overflow:"hidden", cursor:"pointer", boxShadow:"0 1px 3px rgba(0,0,0,0.06)", transition:"box-shadow 0.2s, transform 0.2s" },
+  tonightTag:   { position:"absolute", top:12, left:12, background:"rgba(15,23,42,0.85)", color:"#fff", fontSize:11, fontWeight:600, padding:"5px 10px", borderRadius:20 },
 };
