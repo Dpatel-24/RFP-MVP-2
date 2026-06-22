@@ -218,6 +218,73 @@ function PasswordLogin({ title, eyebrow, blurb, onSignedIn, light = false }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GUEST PROFILE FORM (light) — first/last/email/phone, no picture
+// ─────────────────────────────────────────────────────────────────────────────
+function GuestProfileForm({ guest, onSaved, onSignOut }) {
+  const [first, setFirst] = useState(guest.firstName || "");
+  const [last, setLast]   = useState(guest.lastName || "");
+  const [phone, setPhone] = useState(guest.phone || "");
+  const [busy, setBusy]   = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function save() {
+    setBusy(true); setSaved(false);
+    const fields = { firstName: first.trim(), lastName: last.trim(), phone: phone.trim() };
+    try {
+      await api.updateGuestProfile(guest.id, fields);
+      setSaved(true);
+      onSaved(fields);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) { console.error(e); alert("Could not save your profile."); }
+    finally { setBusy(false); }
+  }
+
+  const label = { fontSize:12, fontWeight:600, color:SL.sub, marginBottom:6, display:"block" };
+  return (
+    <div style={{ ...SL.panel, padding:24 }}>
+      <h2 style={{ ...SL.h1, fontSize:20, margin:"0 0 4px" }}>Your details</h2>
+      <div style={{ fontSize:12, color:SL.faint, marginBottom:4 }}>
+        {guest.rating > 0 ? `⭐ ${guest.rating.toFixed(1)}` : "New member"} · {guest.stays} stays · Member since {guest.memberSince}
+      </div>
+      <p style={{ fontSize:12, color:SL.sub, margin:"0 0 20px", lineHeight:1.6 }}>
+        These details are private. Hotels only ever see your star rating and stay count — never your name, email, or phone.
+      </p>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
+        <div>
+          <label style={label}>First name</label>
+          <input style={SL.field} value={first} onChange={e=>setFirst(e.target.value)} placeholder="First name" />
+        </div>
+        <div>
+          <label style={label}>Last name</label>
+          <input style={SL.field} value={last} onChange={e=>setLast(e.target.value)} placeholder="Last name" />
+        </div>
+      </div>
+      <div style={{ marginBottom:14 }}>
+        <label style={label}>Email address</label>
+        <input style={{ ...SL.field, background:"#F3F4F6", color:SL.sub }} value={guest.email || ""} readOnly />
+        <div style={{ fontSize:11, color:SL.faint, marginTop:5 }}>Email is tied to your login and can't be changed here.</div>
+      </div>
+      <div style={{ marginBottom:20 }}>
+        <label style={label}>Phone number</label>
+        <input style={SL.field} value={phone} onChange={e=>setPhone(e.target.value)} placeholder="(555) 555-5555" type="tel" />
+      </div>
+
+      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+        <button style={{ ...SL.primaryBtn, width:"auto", padding:"12px 22px", opacity:busy?0.5:1 }} disabled={busy} onClick={save}>
+          {busy ? "Saving…" : "Save changes"}
+        </button>
+        {saved && <span style={{ fontSize:13, color:"#059669", fontWeight:600 }}>✓ Saved</span>}
+      </div>
+
+      <div style={{ borderTop:`1px solid ${SL.line}`, marginTop:22, paddingTop:18 }}>
+        <button style={SL.ghostBtn} onClick={onSignOut}>Sign Out</button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // HOTEL DISCOVERY LISTING  (light, Figma wireframe layout — Home/browse only)
 // ─────────────────────────────────────────────────────────────────────────────
 const HERO_FALLBACK = "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1600&q=80";
@@ -361,6 +428,7 @@ function GuestView() {
   const [submitting, setSubmitting]       = useState(false);
   const [guestDate, setGuestDate]         = useState(localDateStr());
   const [agreeTerms, setAgreeTerms]       = useState(false);
+  const [now, setNow]                     = useState(Date.now());
   const timerRef = useRef(null);
 
   const myBids    = bids;
@@ -382,6 +450,7 @@ function GuestView() {
     async function boot(session) {
       if (!session) { setCurrentGuest(null); setBids([]); return; }
       const profile = await api.ensureGuestProfile(session.user, session.user.email?.split("@")[0]);
+      if (profile) profile.email = session.user.email;
       setCurrentGuest(profile);
       refreshBids(profile);
       if (unsub) unsub();
@@ -427,6 +496,12 @@ function GuestView() {
     timerRef.current = setInterval(tick, 1000);
     return () => clearInterval(timerRef.current);
   }, [screen, activeBid]);
+
+  // ── Always-on 1s ticker for live-request countdowns ────────────────────────
+  useEffect(() => {
+    const iv = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(iv);
+  }, []);
 
   async function handleBid() {
     if (!currentGuest) { setScreen("login"); return; }
@@ -836,15 +911,13 @@ function GuestView() {
     // profile tab
     if (sideTab === "profile") return (
       <div style={{ ...SL.wrap, maxWidth:560 }}>
-        <div style={SL.sectionLabel}>Your Profile</div>
+        <h1 style={{ ...SL.h1, marginBottom:18 }}>My Profile</h1>
         {currentGuest
-          ? <>
-              <GuestProfileCard guest={currentGuest} light />
-              <div style={{ marginTop:14, fontSize:12, color:SL.sub, lineHeight:1.7 }}>
-                Hotels see only your star rating and stay count — no name, email, or demographic info. This prevents discrimination while letting hotels make informed decisions.
-              </div>
-              <button style={{ ...SL.ghostBtn, marginTop:20 }} onClick={handleSignOut}>Sign Out</button>
-            </>
+          ? <GuestProfileForm
+              guest={currentGuest}
+              onSaved={(f)=>setCurrentGuest(g => ({ ...g, ...f, name:[f.firstName,f.lastName].filter(Boolean).join(" ") || g.name }))}
+              onSignOut={handleSignOut}
+            />
           : <div style={{ ...SL.panel, padding:"40px 28px", textAlign:"center" }}>
               <div style={{ marginBottom:12, fontSize:15, fontWeight:600 }}>Not signed in</div>
               <button style={{ ...SL.primaryBtn, maxWidth:220, margin:"0 auto" }} onClick={()=>setScreen("login")}>Sign In / Join</button>
@@ -863,17 +936,23 @@ function GuestView() {
         <h1 style={{ ...SL.h1, marginBottom:18 }}>Live Requests</h1>
         {myLive.length === 0
           ? <div style={{ ...SL.panel, padding:"40px 28px", textAlign:"center", color:SL.sub, fontSize:14 }}>No active requests.<br/>Submit a bid to get started.</div>
-          : myLive.map(b => (
+          : myLive.map(b => {
+            const rem = Math.max(0, Math.round((new Date(b.expiresAt).getTime() - now)/1000));
+            const total = b.status === "countered" ? COUNTER_TIMER : TIMER_SECONDS;
+            return (
             <div key={b.id} style={{ ...SL.panel, padding:"14px 16px", marginBottom:12 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, marginBottom:10 }}>
                 <div>
                   <div style={{ fontWeight:700, fontSize:14 }}>{b.room.name}</div>
                   <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>{b.hotel.name}</div>
                   <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>📅 {shortDate(b.stayDate)}</div>
+                  <div style={{ marginTop:8 }}><Badge status={effectiveStatus(b)} /></div>
                 </div>
-                <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, color: b.status==="countered"?"#7C3AED":"#B45309" }}>${b.status==="countered"?b.counterAmount:b.amount}</div>
+                <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, flexShrink:0 }}>
+                  <TimerRing seconds={rem} total={total} size={64} />
+                  <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16, color: b.status==="countered"?"#7C3AED":"#B45309" }}>${b.status==="countered"?b.counterAmount:b.amount}</div>
+                </div>
               </div>
-              <Badge status={effectiveStatus(b)} />
               {b.status === "countered" && (
                 <button style={{ ...SL.primaryBtn, marginTop:10, padding:"10px 0", fontSize:13, background:"#7C3AED", color:"#fff" }}
                   onClick={()=>{ setActiveBid(b); setSelectedHotel(b.hotel); setSelectedRoom(b.room); setCTL(secondsLeft(b)); setSideTab("browse"); setScreen("counter"); }}>
@@ -881,7 +960,8 @@ function GuestView() {
                 </button>
               )}
             </div>
-          ))
+            );
+          })
         }
       </div>
     );
