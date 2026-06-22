@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
 import * as api from "../lib/api";
-import { TIMER_SECONDS, COUNTER_TIMER, effectiveStatus, secondsLeft } from "../lib/api";
+import { TIMER_SECONDS, COUNTER_TIMER, effectiveStatus, secondsLeft, localDateStr } from "../lib/api";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -10,6 +10,25 @@ function fmt(secs) {
   const m = Math.floor(secs / 60);
   const s = secs % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+// Parse a YYYY-MM-DD string as a local date (not UTC midnight).
+function parseDate(ymd) {
+  if (!ymd) return null;
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+function shortDate(ymd) {
+  const d = parseDate(ymd);
+  return d ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+}
+// Stay window: same-day check-in, checkout next morning 11 AM.
+function stayWindow(ymd) {
+  const d = parseDate(ymd);
+  if (!d) return "";
+  const next = new Date(d.getTime() + 86400000);
+  const opts = { month: "short", day: "numeric" };
+  return `${d.toLocaleDateString(undefined, opts)} → ${next.toLocaleDateString(undefined, opts)} 11:00 AM`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,6 +75,18 @@ function RoomIcon({ type }) {
       <circle cx="20" cy="30" r="6"  fill={c.accent} opacity="0.4"  />
     </svg>
   );
+}
+
+// Photo if a URL exists, otherwise the SVG room illustration. `height` controls
+// the rendered box; the image covers it.
+function ImageOrIcon({ url, type, height = 110, radius = 8 }) {
+  if (url) {
+    return (
+      <img src={url} alt="" loading="lazy"
+        style={{ width:"100%", height, objectFit:"cover", borderRadius:radius, display:"block" }} />
+    );
+  }
+  return <div style={{ height, borderRadius:radius, overflow:"hidden" }}><RoomIcon type={type} /></div>;
 }
 
 function Badge({ status }) {
@@ -191,6 +222,10 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms }) {
         {hotelsWithRooms.map(hotel => (
           <div key={hotel.id} style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:14, overflow:"hidden", cursor:"pointer" }}
             onClick={() => onSelectHotel(hotel)}>
+            {hotel.heroImage && (
+              <img src={hotel.heroImage} alt="" loading="lazy"
+                style={{ width:"100%", height:150, objectFit:"cover", display:"block" }} />
+            )}
             <div style={{ padding:"16px 18px 0" }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
                 <div>
@@ -368,7 +403,7 @@ function GuestView() {
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
           {selectedHotel.rooms.map(room => (
             <div key={room.id} style={S.roomCard} onClick={() => { setSelectedRoom(room); setScreen("bid"); }}>
-              <RoomIcon type={room.image} />
+              <ImageOrIcon url={room.imageUrl} type={room.image} height={150} radius={0} />
               <div style={{ padding:"12px 14px 14px" }}>
                 <div style={S.roomName}>{room.name}</div>
                 <div style={S.roomType}>{room.type} · {room.sqft} sq ft · Floor {room.floor}</div>
@@ -402,7 +437,7 @@ function GuestView() {
         <button style={S.backBtn} onClick={() => setScreen("hotel")}>← Back</button>
         {currentGuest && <div style={{ marginBottom:14 }}><GuestProfileCard guest={currentGuest} compact /></div>}
         <div style={{ marginBottom:14 }}>
-          <RoomIcon type={selectedRoom.image} />
+          <ImageOrIcon url={selectedRoom.imageUrl} type={selectedRoom.image} height={170} />
           <div style={{ marginTop:10 }}>
             <div style={S.roomName}>{selectedRoom.name}</div>
             <div style={S.roomType}>{selectedRoom.type} · {selectedRoom.sqft} sq ft</div>
@@ -411,6 +446,7 @@ function GuestView() {
         <div style={S.formCard}>
           <div style={S.formTitle}>Your Rate Request</div>
           <div style={S.formHint}>Rack rate is ${selectedRoom.rack}. The hotel will respond within 10 minutes.</div>
+          <div style={{ fontSize:12, color:"#64748B", marginBottom:14 }}>📅 Tonight · {stayWindow(localDateStr())}</div>
           <div style={S.amountWrap}>
             <span style={S.dollarSign}>$</span>
             <input type="number" placeholder="0" value={bidAmount} onChange={e=>setBidAmount(e.target.value)} style={S.amountInput} min="1" />
@@ -437,7 +473,7 @@ function GuestView() {
           <strong style={{ color:"#F7F5F0" }}>{activeBid?.hotel?.name}</strong> is reviewing your ${activeBid?.amount} request for {activeBid?.room?.name}.
         </p>
         <div style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:12, padding:"16px 20px", maxWidth:300, margin:"22px auto 0" }}>
-          {[["Room", activeBid?.room?.name], ["Your bid","$"+activeBid?.amount], ["Ref", activeBid?.id?.slice(0,8)]].map(([l,v]) => (
+          {[["Room", activeBid?.room?.name], ["Stay", stayWindow(activeBid?.stayDate || localDateStr())], ["Your bid","$"+activeBid?.amount], ["Ref", activeBid?.id?.slice(0,8)]].map(([l,v]) => (
             <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", fontSize:14, borderBottom:"1px solid #1E293B" }}>
               <span style={{ color:"#64748B" }}>{l}</span>
               <span style={{ color:l==="Your bid"?"#F59E0B":"#F7F5F0", fontWeight:l==="Your bid"?700:400, fontFamily:l==="Ref"?"monospace":"inherit", fontSize:l==="Ref"?12:14 }}>{v}</span>
@@ -487,7 +523,7 @@ function GuestView() {
           </h2>
           <p style={{ color:"#94A3B8", maxWidth:300, margin:"10px auto 0", lineHeight:1.7 }}>
             {accepted
-              ? `Your $${bid?.counterAmount ?? bid?.amount} rate for ${bid?.room?.name} was accepted. Show your confirmation code at check-in.`
+              ? `Your $${bid?.counterAmount ?? bid?.amount} rate for ${bid?.room?.name} was accepted (${stayWindow(bid?.stayDate || localDateStr())}). Show your confirmation code at check-in.`
               : expired ? "The window closed. Try again — rooms may still be available."
               : "The hotel couldn't accept this rate. Try a different amount or room."}
           </p>
@@ -538,6 +574,7 @@ function GuestView() {
                 <div>
                   <div style={{ fontWeight:700, fontSize:13 }}>{b.room.name}</div>
                   <div style={{ fontSize:11, color:"#475569", marginTop:2 }}>{b.hotel.name}</div>
+                  <div style={{ fontSize:11, color:"#475569", marginTop:2 }}>📅 {shortDate(b.stayDate)}</div>
                 </div>
                 <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, color: b.status==="countered"?"#A78BFA":"#F59E0B" }}>${b.status==="countered"?b.counterAmount:b.amount}</div>
               </div>
@@ -565,6 +602,7 @@ function GuestView() {
                 <div>
                   <div style={{ fontWeight:700, fontSize:13 }}>{b.room.name}</div>
                   <div style={{ fontSize:11, color:"#475569", marginTop:1 }}>{b.hotel.name}</div>
+                  <div style={{ fontSize:11, color:"#475569", marginTop:1 }}>📅 {shortDate(b.stayDate)}</div>
                 </div>
                 <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16, color:["accepted","handled"].includes(b.status)?"#22C55E":"#64748B" }}>${b.counterAmount ?? b.amount}</div>
               </div>
@@ -644,9 +682,80 @@ function GuestView() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// BOOKING CALENDAR (hotel history)
+// ─────────────────────────────────────────────────────────────────────────────
+const STATUS_COLOR = { pending:"#F59E0B", countered:"#A78BFA", accepted:"#22C55E", handled:"#22C55E", declined:"#EF4444", expired:"#64748B" };
+
+function BookingCalendar({ bids, selectedDate, onSelect }) {
+  const [view, setView] = useState(() => {
+    const d = parseDate(selectedDate) || new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+
+  const byDate = {};
+  bids.forEach(b => { if (b.stayDate) (byDate[b.stayDate] = byDate[b.stayDate] || []).push(b); });
+
+  const year = view.getFullYear(), month = view.getMonth();
+  const startDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  const ymd = (d) => localDateStr(new Date(year, month, d));
+  const monthLabel = view.toLocaleDateString(undefined, { month:"long", year:"numeric" });
+
+  return (
+    <div style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:14, padding:"16px 18px", marginBottom:18 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <button style={{ ...S.ghostBtn, padding:"6px 12px" }} onClick={()=>setView(new Date(year, month-1, 1))}>←</button>
+        <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16 }}>{monthLabel}</div>
+        <button style={{ ...S.ghostBtn, padding:"6px 12px" }} onClick={()=>setView(new Date(year, month+1, 1))}>→</button>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 }}>
+        {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i)=>(
+          <div key={i} style={{ textAlign:"center", fontSize:10, color:"#475569", fontWeight:600, letterSpacing:"0.05em" }}>{d}</div>
+        ))}
+        {cells.map((d,i) => {
+          if (d == null) return <div key={"e"+i} />;
+          const key = ymd(d);
+          const dayBids = byDate[key] || [];
+          const sel = key === selectedDate;
+          const statuses = [...new Set(dayBids.map(b => effectiveStatus(b)))];
+          return (
+            <button key={key} onClick={()=>onSelect(key)}
+              style={{ minHeight:62, borderRadius:8, border: sel?"1px solid #F59E0B":"1px solid #1E293B",
+                background: sel?"#1E293B":"#0A0F1E", cursor:"pointer", padding:6, textAlign:"left",
+                display:"flex", flexDirection:"column", gap:4 }}>
+              <span style={{ fontSize:12, color: sel?"#F7F5F0":"#94A3B8" }}>{d}</span>
+              {dayBids.length > 0 && (
+                <>
+                  <span style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:13, color:"#F7F5F0" }}>{dayBids.length}</span>
+                  <span style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
+                    {statuses.slice(0,5).map(s => (
+                      <span key={s} style={{ width:6, height:6, borderRadius:"50%", background:STATUS_COLOR[s]||"#64748B" }} />
+                    ))}
+                  </span>
+                </>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display:"flex", gap:14, marginTop:12, flexWrap:"wrap" }}>
+        {Object.entries({ Pending:"pending", Countered:"countered", Accepted:"accepted", Declined:"declined", Expired:"expired" }).map(([label,s])=>(
+          <span key={s} style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:"#64748B" }}>
+            <span style={{ width:7, height:7, borderRadius:"50%", background:STATUS_COLOR[s] }} />{label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // KPI PANEL
 // ─────────────────────────────────────────────────────────────────────────────
-function KPIPanel({ bids, totalRooms = 0 }) {
+function KPIPanel({ bids, totalRooms = 0, dateLabel }) {
   const accepted = bids.filter(b => ["accepted","handled"].includes(b.status));
   const declined = bids.filter(b => b.status === "declined");
   const expired  = bids.filter(b => b.status === "expired");
@@ -675,10 +784,11 @@ function KPIPanel({ bids, totalRooms = 0 }) {
 
   return (
     <div>
-      <div style={{ ...S.dashSectionHead, marginBottom:20 }}>
-        <h2 style={S.dashTitle}>Tonight's KPIs</h2>
-        <span style={{ color:"#475569", fontSize:14 }}>All figures reset nightly. Distressed inventory performance.</span>
-      </div>
+      {total === 0 && (
+        <div style={{ ...S.emptyState, marginBottom:20 }}>
+          <div style={{ color:"#475569", fontSize:13 }}>No requests on {dateLabel || "this day"}.</div>
+        </div>
+      )}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(195px, 1fr))", gap:12, marginBottom:28 }}>
         {kpis.map(k => (
           <div key={k.label} style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:12, padding:"16px 18px" }}>
@@ -719,9 +829,13 @@ function HotelDashboard() {
   const [activeTab, setActiveTab]       = useState("live");
   const [now, setNow]                   = useState(Date.now());
   const [floorInputs, setFloorInputs]   = useState({});
+  const [rackInputs, setRackInputs]     = useState({});
   const [counterInputs, setCounterInputs] = useState({});
   const [notification, setNotification] = useState(null);
   const [expandedGuest, setExpandedGuest] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(localDateStr());
+  const [showAdd, setShowAdd]           = useState(false);
+  const [newRoom, setNewRoom]           = useState({ name:"", room_type:"", rack_rate:"", bid_floor:"", inventory_count:"1", amenities:"" });
   const prevCount = useRef(0);
 
   const refreshBids = useCallback(async (h) => {
@@ -729,6 +843,10 @@ function HotelDashboard() {
     if (!hot) return;
     try { setBids(await api.getHotelRequests(hot.id)); } catch (e) { console.error(e); }
   }, [hotel]);
+
+  const reloadRooms = useCallback(async () => {
+    try { setRooms(await api.getOwnerRooms()); } catch (e) { console.error(e); }
+  }, []);
 
   // ── Session + load owner's hotel/rooms/requests + realtime ─────────────────
   useEffect(() => {
@@ -745,13 +863,13 @@ function HotelDashboard() {
         setFloorInputs(rms.reduce((a,r)=>({ ...a, [r.id]: r.floor_price ?? "" }), {}));
         refreshBids(h);
         if (unsub) unsub();
-        unsub = api.subscribeRequests("hotel_id", h.id, () => refreshBids(h));
+        unsub = api.subscribeRequests("hotel_id", h.id, () => { refreshBids(h); reloadRooms(); });
       } catch (e) { console.error(e); }
     }
     api.getSession().then(boot);
     const { data: sub } = api.onAuthChange(boot);
     return () => { if (unsub) unsub(); sub?.subscription?.unsubscribe(); };
-  }, [refreshBids]);
+  }, [refreshBids, reloadRooms]);
 
   // ── 1s ticker to recompute live timers from expires_at ─────────────────────
   useEffect(() => {
@@ -770,7 +888,8 @@ function HotelDashboard() {
   }, [bids]);
 
   async function onDecide(id, status) {
-    try { await api.hotelDecide(id, status); refreshBids(); } catch (e) { console.error(e); alert("Action failed."); }
+    try { await api.hotelDecide(id, status); refreshBids(); if (status === "accepted") reloadRooms(); }
+    catch (e) { console.error(e); alert("Action failed."); }
   }
   async function onCounter(id, amount) {
     try { await api.hotelCounter(id, amount); refreshBids(); } catch (e) { console.error(e); alert("Counter failed."); }
@@ -783,7 +902,46 @@ function HotelDashboard() {
       setRooms(prev => prev.map(r => r.id===roomId ? { ...r, floor_price:v } : r));
     } catch (e) { console.error(e); alert("Could not update bid floor."); }
   }
+  async function onInventory(roomId, delta) {
+    const room = rooms.find(r => r.id === roomId);
+    const next = Math.max(0, (room?.inventoryCount ?? 0) + delta);
+    setRooms(prev => prev.map(r => r.id===roomId ? { ...r, inventoryCount:next, available:next>0 } : r));
+    try { await api.setInventory(roomId, next); } catch (e) { console.error(e); alert("Could not update inventory."); reloadRooms(); }
+  }
+  async function onSaveRack(roomId) {
+    const v = parseFloat(rackInputs[roomId]);
+    if (Number.isNaN(v)) return;
+    try {
+      await api.updateRoom(roomId, { rack_rate: v });
+      setRooms(prev => prev.map(r => r.id===roomId ? { ...r, rack:v } : r));
+      setRackInputs(p => { const n = { ...p }; delete n[roomId]; return n; });
+    } catch (e) { console.error(e); alert("Could not update rack rate."); }
+  }
+  async function onRemoveRoom(roomId) {
+    if (!window.confirm("Remove this room type? It will be hidden from guests. Past bookings are kept.")) return;
+    try { await api.removeRoom(roomId); reloadRooms(); } catch (e) { console.error(e); alert("Could not remove room."); }
+  }
+  async function onAddRoom() {
+    const rack = parseFloat(newRoom.rack_rate);
+    const floor = parseFloat(newRoom.bid_floor);
+    const inv = parseInt(newRoom.inventory_count);
+    if (!newRoom.name || !newRoom.room_type || Number.isNaN(rack) || Number.isNaN(floor)) {
+      alert("Name, room type, rack rate and bid floor are required."); return;
+    }
+    try {
+      await api.addRoom(hotel.id, {
+        name: newRoom.name, room_type: newRoom.room_type, rack_rate: rack, bid_floor: floor,
+        inventory_count: Number.isNaN(inv) ? 1 : inv,
+        amenities: newRoom.amenities.split(",").map(s => s.trim()).filter(Boolean),
+      });
+      setNewRoom({ name:"", room_type:"", rack_rate:"", bid_floor:"", inventory_count:"1", amenities:"" });
+      setShowAdd(false);
+      reloadRooms();
+    } catch (e) { console.error(e); alert("Could not add room."); }
+  }
   async function onSignOut() { await api.signOut(); }
+
+  const dayBids = bids.filter(b => b.stayDate === selectedDate);
 
   const liveBids = bids.filter(b => effectiveStatus(b) === "pending");
   const histBids = bids.filter(b => effectiveStatus(b) !== "pending");
@@ -950,14 +1108,19 @@ function HotelDashboard() {
 
         {activeTab === "history" && (
           <div>
-            <div style={S.dashSectionHead}><h2 style={S.dashTitle}>Request History</h2></div>
-            {histBids.length === 0
-              ? <div style={S.emptyState}><div style={{ color:"#475569", fontSize:13 }}>No completed requests yet.</div></div>
+            <div style={S.dashSectionHead}>
+              <h2 style={S.dashTitle}>History</h2>
+              <span style={{ color:"#475569", fontSize:14 }}>Tap a day to see its requests. The selected day also drives KPIs.</span>
+            </div>
+            <BookingCalendar bids={bids} selectedDate={selectedDate} onSelect={setSelectedDate} />
+            <div style={S.sectionLabel}>{shortDate(selectedDate)} · {dayBids.length} request{dayBids.length===1?"":"s"}</div>
+            {dayBids.length === 0
+              ? <div style={S.emptyState}><div style={{ color:"#475569", fontSize:13 }}>No requests on this day.</div></div>
               : <div style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:14, overflow:"hidden" }}>
                   <div style={{ display:"grid", gridTemplateColumns:"2fr 1.5fr 0.8fr 0.8fr 1fr 1.2fr", padding:"12px 20px", background:"#0A0F1E", fontSize:11, color:"#475569", letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:600 }}>
                     <span>Guest</span><span>Room</span><span>Bid</span><span>Rack</span><span>Rating</span><span>Status</span>
                   </div>
-                  {histBids.map(b => (
+                  {dayBids.map(b => (
                     <div key={b.id} style={{ display:"grid", gridTemplateColumns:"2fr 1.5fr 0.8fr 0.8fr 1fr 1.2fr", padding:"14px 20px", borderTop:"1px solid #1E293B", alignItems:"center" }}>
                       <span>
                         <div style={{ fontWeight:600, fontSize:14 }}>{b.guest?.name||"Guest"}</div>
@@ -975,7 +1138,22 @@ function HotelDashboard() {
           </div>
         )}
 
-        {activeTab === "kpi" && <KPIPanel bids={bids} totalRooms={rooms.length} />}
+        {activeTab === "kpi" && (
+          <div>
+            <div style={{ ...S.dashSectionHead, display:"flex", justifyContent:"space-between", alignItems:"flex-end", flexWrap:"wrap", gap:12 }}>
+              <div>
+                <h2 style={S.dashTitle}>KPIs &amp; Analytics</h2>
+                <span style={{ color:"#475569", fontSize:14 }}>Figures for the selected day.</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:12, color:"#64748B" }}>Date</span>
+                <input type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)}
+                  style={{ ...S.field, width:"auto", padding:"8px 10px", colorScheme:"dark" }} />
+              </div>
+            </div>
+            <KPIPanel bids={dayBids} totalRooms={rooms.length} dateLabel={shortDate(selectedDate)} />
+          </div>
+        )}
 
         {activeTab === "guests" && (
           <div>
@@ -1016,31 +1194,77 @@ function HotelDashboard() {
 
         {activeTab === "rooms" && (
           <div>
-            <div style={S.dashSectionHead}>
-              <h2 style={S.dashTitle}>Room & Bid Floor Settings</h2>
-              <span style={{ color:"#475569", fontSize:14 }}>Floors are never shown to guests. Bids below floor auto-decline instantly.</span>
+            <div style={{ ...S.dashSectionHead, display:"flex", justifyContent:"space-between", alignItems:"flex-end", flexWrap:"wrap", gap:12 }}>
+              <div>
+                <h2 style={S.dashTitle}>Room Settings</h2>
+                <span style={{ color:"#475569", fontSize:14 }}>Manage inventory, rack rate, bid floor, and room types. Floors are never shown to guests.</span>
+              </div>
+              <button style={{ ...S.submitBtn, width:"auto", padding:"10px 16px" }} onClick={()=>setShowAdd(s=>!s)}>
+                {showAdd ? "Close" : "+ Add Room Type"}
+              </button>
             </div>
-            {rooms.map(room => (
-              <div key={room.id} style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:14, padding:20, display:"flex", gap:16, alignItems:"center", marginBottom:14 }}>
-                <div style={{ width:110, flexShrink:0 }}><RoomIcon type={room.image} /></div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontWeight:700, fontSize:16 }}>{room.name}</div>
-                  <div style={{ fontSize:13, color:"#475569", marginTop:2 }}>{room.type} · Rack: ${room.rack}</div>
-                  <div style={S.amenityRow}>{room.amenities.map(a=><span key={a} style={S.amenityTag}>{a}</span>)}</div>
+
+            {showAdd && (
+              <div style={{ ...S.formCard, marginBottom:16 }}>
+                <div style={S.formTitle}>New Room Type</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:10, marginTop:10 }}>
+                  <input style={S.field} placeholder="Name (e.g. King Room)" value={newRoom.name} onChange={e=>setNewRoom(p=>({...p,name:e.target.value}))} />
+                  <input style={S.field} placeholder="Type (e.g. King · Standard)" value={newRoom.room_type} onChange={e=>setNewRoom(p=>({...p,room_type:e.target.value}))} />
+                  <input style={S.field} type="number" placeholder="Rack rate $" value={newRoom.rack_rate} onChange={e=>setNewRoom(p=>({...p,rack_rate:e.target.value}))} />
+                  <input style={S.field} type="number" placeholder="Bid floor $" value={newRoom.bid_floor} onChange={e=>setNewRoom(p=>({...p,bid_floor:e.target.value}))} />
+                  <input style={S.field} type="number" placeholder="Inventory count" value={newRoom.inventory_count} onChange={e=>setNewRoom(p=>({...p,inventory_count:e.target.value}))} />
+                  <input style={S.field} placeholder="Amenities (comma separated)" value={newRoom.amenities} onChange={e=>setNewRoom(p=>({...p,amenities:e.target.value}))} />
                 </div>
-                <div style={{ minWidth:140 }}>
-                  <div style={{ fontSize:11, color:"#64748B", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.06em" }}>Bid Floor</div>
+                <button style={{ ...S.submitBtn, marginTop:14 }} onClick={onAddRoom}>Create Room Type</button>
+              </div>
+            )}
+
+            {rooms.length === 0 && <div style={S.emptyState}><div style={{ color:"#475569", fontSize:13 }}>No room types yet. Add one above.</div></div>}
+
+            {rooms.map(room => (
+              <div key={room.id} style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:14, padding:18, display:"flex", gap:16, alignItems:"center", marginBottom:14, flexWrap:"wrap" }}>
+                <div style={{ width:120, flexShrink:0 }}><ImageOrIcon url={room.imageUrl} type={room.image} height={84} /></div>
+                <div style={{ flex:1, minWidth:160 }}>
+                  <div style={{ fontWeight:700, fontSize:16 }}>{room.name}</div>
+                  <div style={{ fontSize:13, color:"#475569", marginTop:2 }}>{room.type}</div>
+                  <div style={S.amenityRow}>{room.amenities.map(a=><span key={a} style={S.amenityTag}>{a}</span>)}</div>
+                  <button style={{ ...S.ghostBtn, fontSize:12, padding:"5px 10px", marginTop:4, color:"#EF4444", borderColor:"#3B0000" }} onClick={()=>onRemoveRoom(room.id)}>Remove</button>
+                </div>
+
+                {/* Inventory */}
+                <div style={{ minWidth:120, textAlign:"center" }}>
+                  <div style={S.settingLabel}>Inventory</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, justifyContent:"center" }}>
+                    <button style={S.stepBtn} onClick={()=>onInventory(room.id,-1)} disabled={(room.inventoryCount??0)<=0}>−</button>
+                    <span style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:22, minWidth:28 }}>{room.inventoryCount ?? 0}</span>
+                    <button style={S.stepBtn} onClick={()=>onInventory(room.id,1)}>+</button>
+                  </div>
+                  <div style={{ fontSize:11, color:(room.inventoryCount??0)>0?"#22C55E":"#EF4444", marginTop:6 }}>{(room.inventoryCount??0)>0?"Available":"Sold out / hidden"}</div>
+                </div>
+
+                {/* Rack rate */}
+                <div style={{ minWidth:130 }}>
+                  <div style={S.settingLabel}>Rack Rate</div>
                   <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                     <span style={{ color:"#64748B" }}>$</span>
-                    <input type="number" value={floorInputs[room.id] ?? ""}
-                      onChange={e=>setFloorInputs(p=>({...p,[room.id]:e.target.value}))}
-                      style={{ width:68, background:"#1E293B", border:"1px solid #2D3F55", borderRadius:6, padding:"7px 10px", color:"#F7F5F0", fontSize:17, fontWeight:700, fontFamily:"Space Grotesk,sans-serif", outline:"none", textAlign:"center" }} />
-                    <button style={{ padding:"9px 12px", background:"#F59E0B", color:"#0A0F1E", border:"none", borderRadius:6, fontWeight:700, fontSize:12, fontFamily:"Inter,sans-serif", cursor:"pointer" }}
-                      onClick={()=>onSetFloor(room.id)}>
-                      Set
-                    </button>
+                    <input type="number" value={rackInputs[room.id] ?? room.rack}
+                      onChange={e=>setRackInputs(p=>({...p,[room.id]:e.target.value}))}
+                      style={S.settingInput} />
+                    <button style={S.settingSet} onClick={()=>onSaveRack(room.id)}>Set</button>
                   </div>
-                  <div style={{ fontSize:12, color:"#22C55E", marginTop:7 }}>Active: ${room.floor_price ?? "—"}</div>
+                </div>
+
+                {/* Bid floor */}
+                <div style={{ minWidth:140 }}>
+                  <div style={S.settingLabel}>Bid Floor (hidden)</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <span style={{ color:"#64748B" }}>$</span>
+                    <input type="number" value={floorInputs[room.id] ?? (room.floor_price ?? "")}
+                      onChange={e=>setFloorInputs(p=>({...p,[room.id]:e.target.value}))}
+                      style={S.settingInput} />
+                    <button style={S.settingSet} onClick={()=>onSetFloor(room.id)}>Set</button>
+                  </div>
+                  <div style={{ fontSize:11, color:"#22C55E", marginTop:6 }}>Active: ${room.floor_price ?? "—"}</div>
                 </div>
               </div>
             ))}
@@ -1121,6 +1345,10 @@ const S = {
   bidCard:        { background:"#0F172A", border:"1px solid #1E293B", borderRadius:14, padding:20 },
   bidRoom:        { fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:17 },
   decideBtn:      { padding:"11px 16px", borderRadius:9, border:"none", cursor:"pointer", fontFamily:"Inter,sans-serif", fontWeight:700, fontSize:14 },
+  settingLabel:   { fontSize:11, color:"#64748B", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.06em" },
+  settingInput:   { width:64, background:"#1E293B", border:"1px solid #2D3F55", borderRadius:6, padding:"7px 10px", color:"#F7F5F0", fontSize:16, fontWeight:700, fontFamily:"Space Grotesk,sans-serif", outline:"none", textAlign:"center" },
+  settingSet:     { padding:"9px 12px", background:"#F59E0B", color:"#0A0F1E", border:"none", borderRadius:6, fontWeight:700, fontSize:12, fontFamily:"Inter,sans-serif", cursor:"pointer" },
+  stepBtn:        { width:32, height:32, borderRadius:8, border:"1px solid #2D3F55", background:"#1E293B", color:"#F7F5F0", fontSize:18, fontWeight:700, cursor:"pointer", lineHeight:1 },
   toast:          { position:"fixed", top:24, left:"50%", transform:"translateX(-50%)", background:"#0F172A", border:"1px solid #22C55E", borderRadius:12, padding:"14px 18px", display:"flex", gap:12, alignItems:"flex-start", zIndex:2000, boxShadow:"0 8px 32px rgba(0,0,0,0.5)", fontFamily:"Inter,sans-serif", color:"#F7F5F0", minWidth:280 },
   toastDot:       { width:8, height:8, borderRadius:"50%", background:"#22C55E", marginTop:4, flexShrink:0, animation:"pulse 1.5s infinite" },
 };
