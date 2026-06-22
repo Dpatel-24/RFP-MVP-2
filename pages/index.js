@@ -6,6 +6,8 @@ import { TIMER_SECONDS, COUNTER_TIMER, effectiveStatus, secondsLeft, localDateSt
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
+const TAX_RATE = 0.14; // estimated taxes & fees shown in the bid confirmation breakdown
+
 function fmt(secs) {
   const m = Math.floor(secs / 60);
   const s = secs % 60;
@@ -357,6 +359,8 @@ function GuestView() {
   const [currentGuest, setCurrentGuest]   = useState(null);
   const [counterToast, setCounterToast]   = useState(false);
   const [submitting, setSubmitting]       = useState(false);
+  const [guestDate, setGuestDate]         = useState(localDateStr());
+  const [agreeTerms, setAgreeTerms]       = useState(false);
   const timerRef = useRef(null);
 
   const myBids    = bids;
@@ -396,6 +400,7 @@ function GuestView() {
     if (current.status === "pending") return;
     setActiveBid(current);
     clearInterval(timerRef.current);
+    setSideTab("browse"); // ensure the result/counter screen is rendered, not a side panel
     if (current.status === "countered") {
       setCTL(secondsLeft(current));
       setCounterToast(true);
@@ -471,24 +476,78 @@ function GuestView() {
 
     if (screen === "hotel") {
       const fromPrice = Math.min(...selectedHotel.rooms.map(r=>r.rack));
+      const galleryThumbs = selectedHotel.rooms.map(r=>r.imageUrl).filter(Boolean).slice(0,4);
+      const allAmenities = [...new Set(selectedHotel.rooms.flatMap(r=>r.amenities||[]))];
+      const facts = [
+        ["🛏", `${selectedHotel.rooms.length} room type${selectedHotel.rooms.length>1?"s":""}`],
+        ["💵", `From $${fromPrice}`],
+        ["⏱", "10-min response"],
+        ["🌙", "Tonight only"],
+      ];
+      const safety = ["Daily cleaning","Disinfection & sterilization","Fire extinguishers","Smoke detectors"];
+      const reviewCats = ["Cleanliness","Communication","Value for money","Location","Comfort"];
       return (
       <div style={SL.wrapWide}>
         <button style={SL.backBtn} onClick={() => setScreen("listing")}>← All Hotels</button>
-        <div style={{ borderRadius:18, overflow:"hidden", marginBottom:20 }}>
-          <img src={selectedHotel.heroImage || HERO_FALLBACK} alt="" style={{ width:"100%", height:300, objectFit:"cover", display:"block" }} />
-        </div>
-        <div style={{ display:"flex", gap:28, alignItems:"flex-start", flexWrap:"wrap" }}>
-          {/* Left: rooms */}
-          <div style={{ flex:"1 1 460px", minWidth:300 }}>
+
+        {/* Top titles */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, marginBottom:14, flexWrap:"wrap" }}>
+          <div>
             <h1 style={{ ...SL.h1, fontSize:26 }}>{selectedHotel.name}</h1>
             <div style={{ fontSize:14, color:SL.sub, marginTop:5 }}>📍 {selectedHotel.location}</div>
             <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8 }}>
               <StarDisplay rating={selectedHotel.rating} />
               <span style={{ fontSize:13, color:SL.sub }}>{selectedHotel.rating} ({selectedHotel.reviewCount} reviews)</span>
             </div>
-            {selectedHotel.tagline && <p style={{ color:SL.sub, fontSize:14, marginTop:12, lineHeight:1.6 }}>{selectedHotel.tagline}</p>}
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <span style={{ ...SL.ghostBtn, opacity:0.6 }}>↗ Share</span>
+            <span style={{ ...SL.ghostBtn, opacity:0.6 }}>♡ Save</span>
+          </div>
+        </div>
 
-            <div style={{ ...SL.sectionLabel, marginTop:24 }}>Available Tonight</div>
+        {/* Image gallery */}
+        <div style={{ display:"grid", gridTemplateColumns: galleryThumbs.length ? "2fr 1fr 1fr" : "1fr", gridTemplateRows:"170px 170px", gap:8, marginBottom:24, borderRadius:18, overflow:"hidden" }}>
+          <div style={{ gridRow:"1 / span 2", gridColumn:"1" }}>
+            <img src={selectedHotel.heroImage || HERO_FALLBACK} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
+          </div>
+          {galleryThumbs.map((u,i) => (
+            <div key={i} style={{ position:"relative" }}>
+              <img src={u} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
+              {i===galleryThumbs.length-1 && selectedHotel.rooms.length>galleryThumbs.length && (
+                <div style={{ position:"absolute", inset:0, background:"rgba(15,23,42,0.5)", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:13 }}>+{selectedHotel.rooms.length-galleryThumbs.length} More</div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display:"flex", gap:28, alignItems:"flex-start", flexWrap:"wrap" }}>
+          {/* Left column */}
+          <div style={{ flex:"1 1 460px", minWidth:300 }}>
+            {/* Host info */}
+            <div style={{ ...SL.panel, padding:16, display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:8 }}>
+              <div>
+                <div style={{ fontSize:12, color:SL.faint }}>Listed by</div>
+                <div style={{ fontWeight:700, fontSize:15 }}>{selectedHotel.name}</div>
+              </div>
+              <div style={{ textAlign:"right" }}>
+                <div style={{ fontSize:12, color:SL.faint }}>Rooms from</div>
+                <div style={{ fontWeight:700, fontSize:15, color:SL.price }}>${fromPrice}</div>
+              </div>
+            </div>
+
+            {/* Quick facts */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(130px,1fr))", gap:10, marginBottom:24 }}>
+              {facts.map(([ic,l]) => (
+                <div key={l} style={{ ...SL.panel, padding:"12px 14px", display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontSize:18 }}>{ic}</span>
+                  <span style={{ fontSize:13, fontWeight:600 }}>{l}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Rooms */}
+            <div style={SL.sectionLabel}>Available Tonight</div>
             <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
               {selectedHotel.rooms.map(room => (
                 <div key={room.id} style={{ ...SL.card, cursor:"default", display:"flex", flexWrap:"wrap" }}>
@@ -507,6 +566,66 @@ function GuestView() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Description */}
+            <div style={{ marginTop:28 }}>
+              <h3 style={{ ...SL.h1, fontSize:18, marginBottom:8 }}>About this stay</h3>
+              <p style={{ color:SL.sub, fontSize:14, lineHeight:1.7, margin:0 }}>
+                {selectedHotel.tagline ? selectedHotel.tagline + ". " : ""}{selectedHotel.name} releases unsold rooms tonight at guest-named rates in {selectedHotel.city || selectedHotel.location}. Submit a private rate request and the hotel responds within 10 minutes.
+              </p>
+            </div>
+
+            {/* Offered amenities */}
+            <div style={{ marginTop:28 }}>
+              <h3 style={{ ...SL.h1, fontSize:18, marginBottom:12 }}>Offered Amenities</h3>
+              {allAmenities.length ? (
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(180px,1fr))", gap:10 }}>
+                  {allAmenities.map(a => (
+                    <div key={a} style={{ display:"flex", alignItems:"center", gap:8, fontSize:14 }}>
+                      <span style={{ color:"#059669" }}>✓</span>{a}
+                    </div>
+                  ))}
+                </div>
+              ) : <div style={{ color:SL.sub, fontSize:14 }}>Amenities are listed on each room above.</div>}
+            </div>
+
+            {/* Safety & hygiene */}
+            <div style={{ marginTop:28 }}>
+              <h3 style={{ ...SL.h1, fontSize:18, marginBottom:12 }}>Safety &amp; Hygiene</h3>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px,1fr))", gap:10 }}>
+                {safety.map(s => (
+                  <div key={s} style={{ display:"flex", alignItems:"center", gap:8, fontSize:14 }}>
+                    <span>🛡️</span>{s}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Reviews (structure built; populated after stays) */}
+            <div style={{ marginTop:28 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+                <h3 style={{ ...SL.h1, fontSize:18, margin:0 }}>Reviews</h3>
+                <span style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, color:SL.amber }}>{selectedHotel.rating > 0 ? selectedHotel.rating.toFixed(1) : "New"}</span>
+                <StarDisplay rating={selectedHotel.rating} />
+              </div>
+              <div style={{ ...SL.panel, padding:18 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px,1fr))", gap:"12px 24px", marginBottom:16 }}>
+                  {reviewCats.map(cat => (
+                    <div key={cat}>
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:SL.sub, marginBottom:4 }}>
+                        <span>{cat}</span><span>{selectedHotel.rating > 0 ? selectedHotel.rating.toFixed(1) : "—"}</span>
+                      </div>
+                      <div style={{ height:6, borderRadius:4, background:"#EEF0F3", overflow:"hidden" }}>
+                        <div style={{ width:`${selectedHotel.rating>0 ? (selectedHotel.rating/5)*100 : 0}%`, height:"100%", background:SL.amber }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ borderTop:`1px solid ${SL.line}`, paddingTop:16, textAlign:"center", color:SL.sub, fontSize:14 }}>
+                  No guest reviews yet. Reviews appear here after completed stays.
+                </div>
+              </div>
             </div>
           </div>
 
@@ -585,12 +704,61 @@ function GuestView() {
             </div>
           )}
           <div style={{ fontSize:12, color:SL.sub, lineHeight:1.6, marginBottom:16 }}>If accepted, you'll receive a confirmation code to give the hotel at check-in. No payment is taken here — LastKey just delivers your request.</div>
-          <button style={{ ...SL.primaryBtn, opacity:(!bidAmount||submitting)?0.4:1 }} disabled={!bidAmount||submitting} onClick={handleBid}>
-            {currentGuest ? (submitting ? "Submitting…" : "Submit Rate Request") : "Sign In to Bid"}
+          <button style={{ ...SL.primaryBtn, opacity:(!bidAmount)?0.4:1 }} disabled={!bidAmount}
+            onClick={() => { if (!currentGuest) { setScreen("login"); return; } if (!bidAmount || parseInt(bidAmount) < 1) return; setAgreeTerms(false); setScreen("confirm"); }}>
+            {currentGuest ? "Review Request →" : "Sign In to Bid"}
           </button>
         </div>
       </div>
     );
+
+    if (screen === "confirm") {
+      const rate = parseInt(bidAmount) || 0;
+      const taxes = Math.round(rate * TAX_RATE);
+      const total = rate + taxes;
+      return (
+        <div style={{ ...SL.wrap, maxWidth:560 }}>
+          <button style={SL.backBtn} onClick={() => setScreen("bid")}>← Edit request</button>
+          <h1 style={{ ...SL.h1, fontSize:24, marginBottom:4 }}>Review &amp; confirm</h1>
+          <p style={{ color:SL.sub, fontSize:14, margin:"0 0 18px" }}>Confirm your rate request. No card is charged — you pay the hotel directly if accepted.</p>
+
+          {/* Selected room summary */}
+          <div style={{ ...SL.panel, padding:14, display:"flex", gap:12, alignItems:"center", marginBottom:14 }}>
+            <div style={{ width:84, flexShrink:0 }}><ImageOrIcon url={selectedRoom?.imageUrl} type={selectedRoom?.image} height={64} radius={10} /></div>
+            <div>
+              <div style={{ fontWeight:700, fontSize:15 }}>{selectedRoom?.name}</div>
+              <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>{selectedHotel?.name}</div>
+              <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>📅 {stayWindow(localDateStr())}</div>
+            </div>
+          </div>
+
+          {/* Price breakdown */}
+          <div style={{ ...SL.panel, padding:18, marginBottom:14 }}>
+            <div style={{ fontSize:11, color:SL.faint, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginBottom:12 }}>Price details</div>
+            {[["Your rate (1 night)", `$${rate}`], [`Taxes & fees (est. ${Math.round(TAX_RATE*100)}%)`, `$${taxes}`]].map(([l,v]) => (
+              <div key={l} style={{ display:"flex", justifyContent:"space-between", fontSize:14, marginBottom:10, color:SL.sub }}>
+                <span>{l}</span><span style={{ color:SL.ink }}>{v}</span>
+              </div>
+            ))}
+            <div style={{ borderTop:`1px solid ${SL.line}`, paddingTop:12, display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
+              <span style={{ fontWeight:700, fontSize:15 }}>Estimated total at hotel</span>
+              <span style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:22, color:SL.price }}>${total}</span>
+            </div>
+            <div style={{ fontSize:11, color:SL.faint, marginTop:8 }}>Final amount is set by the hotel if your rate is accepted or countered.</div>
+          </div>
+
+          {/* Terms */}
+          <label style={{ display:"flex", gap:10, alignItems:"flex-start", fontSize:13, color:SL.sub, marginBottom:16, cursor:"pointer" }}>
+            <input type="checkbox" checked={agreeTerms} onChange={e=>setAgreeTerms(e.target.checked)} style={{ marginTop:2 }} />
+            <span>I understand this is a private rate request, not a guaranteed booking. If accepted, I'll pay the hotel directly at check-in and agree to LastKey's terms and cancellation policy.</span>
+          </label>
+
+          <button style={{ ...SL.primaryBtn, opacity:(!agreeTerms||submitting)?0.4:1 }} disabled={!agreeTerms||submitting} onClick={handleBid}>
+            {submitting ? "Submitting…" : "Confirm & Submit Request"}
+          </button>
+        </div>
+      );
+    }
 
     if (screen === "waiting") return (
       <div style={{ ...SL.wrap, maxWidth:560, textAlign:"center", paddingTop:48 }}>
@@ -708,7 +876,7 @@ function GuestView() {
               <Badge status={effectiveStatus(b)} />
               {b.status === "countered" && (
                 <button style={{ ...SL.primaryBtn, marginTop:10, padding:"10px 0", fontSize:13, background:"#7C3AED", color:"#fff" }}
-                  onClick={()=>{ setActiveBid(b); setSelectedHotel(b.hotel); setSelectedRoom(b.room); setCTL(secondsLeft(b)); setScreen("counter"); }}>
+                  onClick={()=>{ setActiveBid(b); setSelectedHotel(b.hotel); setSelectedRoom(b.room); setCTL(secondsLeft(b)); setSideTab("browse"); setScreen("counter"); }}>
                   View Counter Offer →
                 </button>
               )}
@@ -718,30 +886,46 @@ function GuestView() {
       </div>
     );
 
-    if (sideTab === "history") return (
-      <div style={{ ...SL.wrap, maxWidth:640 }}>
-        <h1 style={{ ...SL.h1, marginBottom:18 }}>History</h1>
-        {myHistory.length === 0
-          ? <div style={{ ...SL.panel, padding:"40px 28px", textAlign:"center", color:SL.sub, fontSize:14 }}>No completed requests yet.</div>
-          : myHistory.map(b => (
-            <div key={b.id} style={{ ...SL.panel, padding:"14px 16px", marginBottom:12 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-                <div>
-                  <div style={{ fontWeight:700, fontSize:14 }}>{b.room.name}</div>
-                  <div style={{ fontSize:12, color:SL.sub, marginTop:1 }}>{b.hotel.name}</div>
-                  <div style={{ fontSize:12, color:SL.sub, marginTop:1 }}>📅 {shortDate(b.stayDate)}</div>
-                </div>
-                <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16, color:["accepted","handled"].includes(b.status)?"#059669":SL.faint }}>${b.counterAmount ?? b.amount}</div>
+    if (sideTab === "history") {
+      const dayBids = myBids.filter(b => b.stayDate === guestDate);
+      return (
+        <div style={{ ...SL.wrap, maxWidth:760 }}>
+          <h1 style={{ ...SL.h1, marginBottom:18 }}>Reservations</h1>
+          <BookingCalendar light bids={myBids} selectedDate={guestDate} onSelect={setGuestDate} />
+          <div style={SL.sectionLabel}>{shortDate(guestDate)} · {dayBids.length} request{dayBids.length===1?"":"s"}</div>
+          {dayBids.length === 0
+            ? <div style={{ ...SL.panel, padding:"36px 24px", textAlign:"center", color:SL.sub, fontSize:14 }}>No requests on this day.</div>
+            : <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                {dayBids.map(b => {
+                  const st = effectiveStatus(b);
+                  return (
+                    <div key={b.id} style={{ ...SL.panel, padding:16, display:"flex", gap:14, flexWrap:"wrap", alignItems:"center" }}>
+                      <div style={{ flex:1, minWidth:220 }}>
+                        <div style={{ fontWeight:700, fontSize:15 }}>{b.room.name}</div>
+                        <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>{b.hotel.name}</div>
+                        <div style={{ fontSize:12, color:SL.sub, marginTop:6 }}>Check-in: {shortDate(b.stayDate)} · Checkout 11:00 AM next day</div>
+                        {["accepted","handled"].includes(b.status) && b.confirmationCode && (
+                          <div style={{ fontSize:12, marginTop:4, color:"#047857" }}>Confirmation: <strong style={{ fontFamily:"monospace" }}>{b.confirmationCode}</strong></div>
+                        )}
+                      </div>
+                      <div style={{ textAlign:"right" }}>
+                        <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18 }}>${b.counterAmount ?? b.amount}</div>
+                        <div style={{ marginTop:6 }}><Badge status={st} /></div>
+                        {b.status === "countered" && (
+                          <button style={{ ...SL.primaryBtn, marginTop:8, padding:"8px 12px", fontSize:12, background:"#7C3AED", color:"#fff" }}
+                            onClick={()=>{ setActiveBid(b); setSelectedHotel(b.hotel); setSelectedRoom(b.room); setCTL(secondsLeft(b)); setSideTab("browse"); setScreen("counter"); }}>
+                            View Counter →
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                <Badge status={effectiveStatus(b)} />
-                <span style={{ fontSize:12, color:SL.faint }}>Rack ${b.room.rack}</span>
-              </div>
-            </div>
-          ))
-        }
-      </div>
-    );
+          }
+        </div>
+      );
+    }
 
     return null; // browse and profile are rendered in renderMain
   }
@@ -795,7 +979,7 @@ function GuestView() {
         </div>
 
         {!currentGuest && (
-          <button style={{ ...SL.ghostBtn, margin:"0 0 8px", fontSize:12, padding:"10px 12px", textAlign:"center" }} onClick={()=>setScreen("login")}>
+          <button style={{ ...SL.primaryBtn, marginTop:12, fontSize:13, padding:"11px 12px" }} onClick={()=>{ setSideTab("browse"); setScreen("login"); }}>
             Sign In / Join
           </button>
         )}
@@ -813,7 +997,10 @@ function GuestView() {
 // ─────────────────────────────────────────────────────────────────────────────
 const STATUS_COLOR = { pending:"#F59E0B", countered:"#A78BFA", accepted:"#22C55E", handled:"#22C55E", declined:"#EF4444", expired:"#64748B" };
 
-function BookingCalendar({ bids, selectedDate, onSelect }) {
+function BookingCalendar({ bids, selectedDate, onSelect, light = false }) {
+  const C = light
+    ? { box:"#fff", border:"#E5E7EB", cell:"#F9FAFB", cellSel:"#FEF3E2", selBorder:"#F59E0B", wd:"#9CA3AF", num:"#6B7280", numSel:"#1A1F2B", count:"#1A1F2B", legend:"#6B7280", btn:SL.ghostBtn }
+    : { box:"#0F172A", border:"#1E293B", cell:"#0A0F1E", cellSel:"#1E293B", selBorder:"#F59E0B", wd:"#475569", num:"#94A3B8", numSel:"#F7F5F0", count:"#F7F5F0", legend:"#64748B", btn:{ ...S.ghostBtn, padding:"6px 12px" } };
   const [view, setView] = useState(() => {
     const d = parseDate(selectedDate) || new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -832,15 +1019,15 @@ function BookingCalendar({ bids, selectedDate, onSelect }) {
   const monthLabel = view.toLocaleDateString(undefined, { month:"long", year:"numeric" });
 
   return (
-    <div style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:14, padding:"16px 18px", marginBottom:18 }}>
+    <div style={{ background:C.box, border:`1px solid ${C.border}`, borderRadius:14, padding:"16px 18px", marginBottom:18 }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-        <button style={{ ...S.ghostBtn, padding:"6px 12px" }} onClick={()=>setView(new Date(year, month-1, 1))}>←</button>
+        <button style={{ ...C.btn, padding:"6px 12px" }} onClick={()=>setView(new Date(year, month-1, 1))}>←</button>
         <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16 }}>{monthLabel}</div>
-        <button style={{ ...S.ghostBtn, padding:"6px 12px" }} onClick={()=>setView(new Date(year, month+1, 1))}>→</button>
+        <button style={{ ...C.btn, padding:"6px 12px" }} onClick={()=>setView(new Date(year, month+1, 1))}>→</button>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 }}>
         {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i)=>(
-          <div key={i} style={{ textAlign:"center", fontSize:10, color:"#475569", fontWeight:600, letterSpacing:"0.05em" }}>{d}</div>
+          <div key={i} style={{ textAlign:"center", fontSize:10, color:C.wd, fontWeight:600, letterSpacing:"0.05em" }}>{d}</div>
         ))}
         {cells.map((d,i) => {
           if (d == null) return <div key={"e"+i} />;
@@ -850,13 +1037,13 @@ function BookingCalendar({ bids, selectedDate, onSelect }) {
           const statuses = [...new Set(dayBids.map(b => effectiveStatus(b)))];
           return (
             <button key={key} onClick={()=>onSelect(key)}
-              style={{ minHeight:62, borderRadius:8, border: sel?"1px solid #F59E0B":"1px solid #1E293B",
-                background: sel?"#1E293B":"#0A0F1E", cursor:"pointer", padding:6, textAlign:"left",
+              style={{ minHeight:62, borderRadius:8, border: sel?`1px solid ${C.selBorder}`:`1px solid ${C.border}`,
+                background: sel?C.cellSel:C.cell, cursor:"pointer", padding:6, textAlign:"left",
                 display:"flex", flexDirection:"column", gap:4 }}>
-              <span style={{ fontSize:12, color: sel?"#F7F5F0":"#94A3B8" }}>{d}</span>
+              <span style={{ fontSize:12, color: sel?C.numSel:C.num }}>{d}</span>
               {dayBids.length > 0 && (
                 <>
-                  <span style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:13, color:"#F7F5F0" }}>{dayBids.length}</span>
+                  <span style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:13, color:C.count }}>{dayBids.length}</span>
                   <span style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
                     {statuses.slice(0,5).map(s => (
                       <span key={s} style={{ width:6, height:6, borderRadius:"50%", background:STATUS_COLOR[s]||"#64748B" }} />
@@ -870,7 +1057,7 @@ function BookingCalendar({ bids, selectedDate, onSelect }) {
       </div>
       <div style={{ display:"flex", gap:14, marginTop:12, flexWrap:"wrap" }}>
         {Object.entries({ Pending:"pending", Countered:"countered", Accepted:"accepted", Declined:"declined", Expired:"expired" }).map(([label,s])=>(
-          <span key={s} style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:"#64748B" }}>
+          <span key={s} style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:C.legend }}>
             <span style={{ width:7, height:7, borderRadius:"50%", background:STATUS_COLOR[s] }} />{label}
           </span>
         ))}
@@ -1485,8 +1672,8 @@ const SL = {
   // palette
   ink:"#1A1F2B", sub:"#6B7280", faint:"#9CA3AF", line:"#E5E7EB", amber:"#F59E0B", price:"#0F766E",
   // page + layout
-  page:         { background:"#F4F5F7", color:"#1A1F2B", fontFamily:"Inter,sans-serif", minHeight:"100vh", display:"flex" },
-  content:      { flex:1, overflowY:"auto", background:"#F4F5F7" },
+  page:         { background:"#F4F5F7", color:"#1A1F2B", fontFamily:"Inter,sans-serif", height:"100vh", overflow:"hidden", display:"flex" },
+  content:      { flex:1, overflowY:"auto", height:"100%", background:"#F4F5F7" },
   wrap:         { maxWidth:760, margin:"0 auto", padding:"28px 24px 64px" },
   wrapWide:     { maxWidth:1040, margin:"0 auto", padding:"24px 24px 64px" },
   h1:           { fontFamily:"Space Grotesk,sans-serif", fontWeight:700, letterSpacing:"-0.5px", color:"#1A1F2B", margin:0, fontSize:24 },
@@ -1508,7 +1695,7 @@ const SL = {
   ghostBtn:     { background:"#fff", border:"1px solid #D1D5DB", color:"#374151", borderRadius:10, padding:"10px 16px", fontSize:13, fontFamily:"Inter,sans-serif", cursor:"pointer", fontWeight:600 },
   amenityTag:   { fontSize:11, padding:"4px 9px", borderRadius:6, background:"#F3F4F6", color:"#374151", fontWeight:500 },
   // sidebar (light)
-  sidebar:      { width:220, flexShrink:0, background:"#fff", borderRight:"1px solid #E5E7EB", padding:"22px 14px", display:"flex", flexDirection:"column" },
+  sidebar:      { width:220, flexShrink:0, background:"#fff", borderRight:"1px solid #E5E7EB", padding:"22px 14px", display:"flex", flexDirection:"column", height:"100%", overflowY:"auto" },
   navItem:      { width:"100%", padding:"10px 12px", borderRadius:10, border:"none", background:"none", color:"#6B7280", cursor:"pointer", textAlign:"left", fontSize:13.5, fontFamily:"Inter,sans-serif", fontWeight:600, display:"flex", justifyContent:"space-between", alignItems:"center" },
   navActive:    { background:"#FEF3E2", color:"#B45309" },
   navBadge:     { background:"#F59E0B", color:"#0A0F1E", fontSize:10, fontWeight:700, padding:"2px 6px", borderRadius:8 },
