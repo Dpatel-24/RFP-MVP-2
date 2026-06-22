@@ -117,36 +117,39 @@ function StarDisplay({ rating, size = 13 }) {
   );
 }
 
-function GuestProfileCard({ guest, compact = false }) {
+function GuestProfileCard({ guest, compact = false, light = false }) {
   if (!guest) return null;
+  const c = light
+    ? { bg:"#fff", border:"#E5E7EB", name:"#1A1F2B", sub:"#6B7280", faint:"#9CA3AF", avBg:"#FEF3E2", avTx:"#B45309", div:"#E5E7EB" }
+    : { bg:"#0A0F1E", border:"#1E293B", name:"#F7F5F0", sub:"#94A3B8", faint:"#475569", avBg:"#1E3A5F", avTx:"#F59E0B", div:"#1E293B" };
   return (
-    <div style={{ background:"#0A0F1E", border:"1px solid #1E293B", borderRadius:10, padding: compact ? "12px 14px" : "16px 18px" }}>
+    <div style={{ background:c.bg, border:`1px solid ${c.border}`, borderRadius:10, padding: compact ? "12px 14px" : "16px 18px" }}>
       <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-        <div style={{ width:compact?36:44, height:compact?36:44, borderRadius:"50%", background:"#1E3A5F", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:compact?14:18, color:"#F59E0B", flexShrink:0 }}>
+        <div style={{ width:compact?36:44, height:compact?36:44, borderRadius:"50%", background:c.avBg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:compact?14:18, color:c.avTx, flexShrink:0 }}>
           {(guest.name || "?").split(" ").map(n=>n[0]).join("")}
         </div>
         <div style={{ flex:1 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <span style={{ fontWeight:700, fontSize:compact?13:15 }}>{guest.name}</span>
+            <span style={{ fontWeight:700, fontSize:compact?13:15, color:c.name }}>{guest.name}</span>
             {guest.verified && <span style={{ fontSize:10, background:"#052E16", color:"#22C55E", padding:"2px 6px", borderRadius:4, fontWeight:600 }}>✓ Verified</span>}
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:3 }}>
             <StarDisplay rating={guest.rating} size={12} />
-            <span style={{ fontSize:12, color:"#94A3B8" }}>{guest.rating > 0 ? guest.rating.toFixed(1) : "New"} · {guest.stays} stays · Since {guest.memberSince}</span>
+            <span style={{ fontSize:12, color:c.sub }}>{guest.rating > 0 ? guest.rating.toFixed(1) : "New"} · {guest.stays} stays · Since {guest.memberSince}</span>
           </div>
         </div>
       </div>
       {!compact && (
         <>
-          <div style={{ display:"flex", gap:16, marginTop:12, paddingTop:12, borderTop:"1px solid #1E293B" }}>
+          <div style={{ display:"flex", gap:16, marginTop:12, paddingTop:12, borderTop:`1px solid ${c.div}` }}>
             {[["Stays", guest.stays], ["Rating", guest.rating > 0 ? guest.rating.toFixed(1) : "—"], ["Reviews", guest.reviews]].map(([l,v]) => (
               <div key={l} style={{ textAlign:"center" }}>
                 <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, color:"#F59E0B" }}>{v}</div>
-                <div style={{ fontSize:11, color:"#475569" }}>{l}</div>
+                <div style={{ fontSize:11, color:c.faint }}>{l}</div>
               </div>
             ))}
           </div>
-          <div style={{ marginTop:10, fontSize:11, color:"#475569", fontStyle:"italic" }}>
+          <div style={{ marginTop:10, fontSize:11, color:c.faint, fontStyle:"italic" }}>
             Hotels see your star rating and stay count only. No personal info is shared.
           </div>
         </>
@@ -158,7 +161,7 @@ function GuestProfileCard({ guest, compact = false }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // EMAIL + PASSWORD LOGIN (shared by guest + hotel)
 // ─────────────────────────────────────────────────────────────────────────────
-function PasswordLogin({ title, eyebrow, blurb, onSignedIn }) {
+function PasswordLogin({ title, eyebrow, blurb, onSignedIn, light = false }) {
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy]         = useState(false);
@@ -178,25 +181,31 @@ function PasswordLogin({ title, eyebrow, blurb, onSignedIn }) {
     onSignedIn(data.user, email.trim());
   }
 
+  const fieldStyle   = light ? SL.field : S.field;
+  const primaryStyle = light ? SL.primaryBtn : S.submitBtn;
+  const secondaryStyle = light
+    ? { ...SL.primaryBtn, background:"#fff", color:"#374151", border:"1px solid #D1D5DB" }
+    : { ...S.submitBtn, background:"#1E293B", color:"#94A3B8" };
+
   return (
     <div>
       <div style={S.heroBox}>
         <div style={S.heroEyebrow}>{eyebrow}</div>
-        <h2 style={{ ...S.heroTitle, fontSize:24 }}>{title}</h2>
-        <p style={S.heroSub}>{blurb}</p>
+        <h2 style={{ ...(light?SL.h1:S.heroTitle), fontSize:24, marginBottom:10 }}>{title}</h2>
+        <p style={{ ...(light?{color:"#6B7280",lineHeight:1.6,fontSize:14,margin:0}:S.heroSub) }}>{blurb}</p>
       </div>
-      <div style={S.formCard}>
+      <div style={{ ...(light ? { ...SL.panel, padding:20 } : S.formCard) }}>
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-          <input style={S.field} placeholder="Email address" type="email" value={email}
+          <input style={fieldStyle} placeholder="Email address" type="email" value={email}
             onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit("signin")} />
-          <input style={S.field} placeholder="Password (min 6 characters)" type="password" value={password}
+          <input style={fieldStyle} placeholder="Password (min 6 characters)" type="password" value={password}
             onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit("signin")} />
         </div>
         <div style={{ display:"flex", gap:10, marginTop:14 }}>
-          <button style={{ ...S.submitBtn, flex:1, opacity:(!email||!password||busy)?0.4:1 }} disabled={!email||!password||busy} onClick={()=>submit("signin")}>
+          <button style={{ ...primaryStyle, flex:1, opacity:(!email||!password||busy)?0.4:1 }} disabled={!email||!password||busy} onClick={()=>submit("signin")}>
             {busy ? "…" : "Sign In"}
           </button>
-          <button style={{ ...S.submitBtn, flex:1, background:"#1E293B", color:"#94A3B8", opacity:(!email||!password||busy)?0.4:1 }} disabled={!email||!password||busy} onClick={()=>submit("signup")}>
+          <button style={{ ...secondaryStyle, flex:1, opacity:(!email||!password||busy)?0.4:1 }} disabled={!email||!password||busy} onClick={()=>submit("signup")}>
             Create Account
           </button>
         </div>
@@ -460,42 +469,87 @@ function GuestView() {
   function renderMain() {
     if (screen === "listing") return <HotelListingView hotelsWithRooms={hotels} onSelectHotel={h => { setSelectedHotel(h); setScreen("hotel"); }} />;
 
-    if (screen === "hotel") return (
-      <div>
-        <button style={S.backBtn} onClick={() => setScreen("listing")}>← All Hotels</button>
-        <div style={{ marginBottom:18 }}>
-          <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20 }}>{selectedHotel.name}</div>
-          <div style={{ fontSize:13, color:"#475569", marginTop:3 }}>{selectedHotel.location}</div>
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:5 }}>
-            <StarDisplay rating={selectedHotel.rating} />
-            <span style={{ fontSize:12, color:"#94A3B8" }}>{selectedHotel.rating} ({selectedHotel.reviewCount} reviews)</span>
-          </div>
+    if (screen === "hotel") {
+      const fromPrice = Math.min(...selectedHotel.rooms.map(r=>r.rack));
+      return (
+      <div style={SL.wrapWide}>
+        <button style={SL.backBtn} onClick={() => setScreen("listing")}>← All Hotels</button>
+        <div style={{ borderRadius:18, overflow:"hidden", marginBottom:20 }}>
+          <img src={selectedHotel.heroImage || HERO_FALLBACK} alt="" style={{ width:"100%", height:300, objectFit:"cover", display:"block" }} />
         </div>
-        <div style={S.sectionLabel}>Available Tonight</div>
-        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-          {selectedHotel.rooms.map(room => (
-            <div key={room.id} style={S.roomCard} onClick={() => { setSelectedRoom(room); setScreen("bid"); }}>
-              <ImageOrIcon url={room.imageUrl} type={room.image} height={150} radius={0} />
-              <div style={{ padding:"12px 14px 14px" }}>
-                <div style={S.roomName}>{room.name}</div>
-                <div style={S.roomType}>{room.type} · {room.sqft} sq ft · Floor {room.floor}</div>
-                <div style={S.amenityRow}>{room.amenities.map(a => <span key={a} style={S.amenityTag}>{a}</span>)}</div>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-                  <span style={{ fontSize:12, color:"#475569" }}>Rack rate</span>
-                  <span style={{ fontSize:14, color:"#94A3B8", textDecoration:"line-through" }}>${room.rack}</span>
+        <div style={{ display:"flex", gap:28, alignItems:"flex-start", flexWrap:"wrap" }}>
+          {/* Left: rooms */}
+          <div style={{ flex:"1 1 460px", minWidth:300 }}>
+            <h1 style={{ ...SL.h1, fontSize:26 }}>{selectedHotel.name}</h1>
+            <div style={{ fontSize:14, color:SL.sub, marginTop:5 }}>📍 {selectedHotel.location}</div>
+            <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8 }}>
+              <StarDisplay rating={selectedHotel.rating} />
+              <span style={{ fontSize:13, color:SL.sub }}>{selectedHotel.rating} ({selectedHotel.reviewCount} reviews)</span>
+            </div>
+            {selectedHotel.tagline && <p style={{ color:SL.sub, fontSize:14, marginTop:12, lineHeight:1.6 }}>{selectedHotel.tagline}</p>}
+
+            <div style={{ ...SL.sectionLabel, marginTop:24 }}>Available Tonight</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+              {selectedHotel.rooms.map(room => (
+                <div key={room.id} style={{ ...SL.card, cursor:"default", display:"flex", flexWrap:"wrap" }}>
+                  <div style={{ width:200, flexShrink:0 }}>
+                    <ImageOrIcon url={room.imageUrl} type={room.image} height={170} radius={0} />
+                  </div>
+                  <div style={{ flex:1, minWidth:220, padding:"14px 16px", display:"flex", flexDirection:"column" }}>
+                    <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16 }}>{room.name}</div>
+                    <div style={{ fontSize:13, color:SL.sub, marginTop:2 }}>{room.type} · {room.sqft} sq ft · Floor {room.floor}</div>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:6, margin:"10px 0" }}>{room.amenities.map(a => <span key={a} style={SL.amenityTag}>{a}</span>)}</div>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:"auto", marginBottom:10 }}>
+                      <span style={{ fontSize:12, color:SL.faint }}>Rack rate</span>
+                      <span style={{ fontSize:14, color:SL.sub, textDecoration:"line-through" }}>${room.rack}</span>
+                    </div>
+                    <button style={SL.primaryBtn} onClick={() => { setSelectedRoom(room); setScreen("bid"); }}>Request a Rate →</button>
+                  </div>
                 </div>
-                <button style={S.bidBtn}>Request a Rate →</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Right: sticky summary */}
+          <aside style={{ flex:"0 0 300px", position:"sticky", top:24, alignSelf:"flex-start" }}>
+            <div style={{ ...SL.panel, padding:18 }}>
+              <div style={{ fontSize:11, color:SL.faint, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700 }}>Your stay</div>
+              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:17, marginTop:6 }}>Tonight</div>
+              <div style={{ fontSize:13, color:SL.sub, marginTop:2 }}>{stayWindow(localDateStr())}</div>
+              <div style={{ borderTop:`1px solid ${SL.line}`, margin:"14px 0" }} />
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:14, marginBottom:8 }}>
+                <span style={{ color:SL.sub }}>Rooms available</span><strong>{selectedHotel.rooms.length}</strong>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:14 }}>
+                <span style={{ color:SL.sub }}>From</span><strong style={{ color:SL.price }}>${fromPrice}</strong>
+              </div>
+              <div style={{ marginTop:14, fontSize:12, color:SL.sub, lineHeight:1.6 }}>
+                Pick a room and name your nightly rate — the hotel responds within 10 minutes.
               </div>
             </div>
-          ))}
+            <div style={{ ...SL.panel, padding:18, marginTop:14 }}>
+              <div style={{ fontSize:11, color:SL.faint, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginBottom:12 }}>How it works</div>
+              {[["1","Name your rate","Offer what you'd pay tonight."],["2","Fast answer","Accept, decline or counter in ~10 min."],["3","Show your code","Give the confirmation code at check-in."]].map(([n,t,d]) => (
+                <div key={n} style={{ display:"flex", gap:10, marginBottom:12 }}>
+                  <div style={{ width:24, height:24, borderRadius:"50%", background:"#FEF3E2", color:"#B45309", fontWeight:700, fontSize:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{n}</div>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700 }}>{t}</div>
+                    <div style={{ fontSize:12, color:SL.sub }}>{d}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
         </div>
       </div>
-    );
+      );
+    }
 
     if (screen === "login") return (
-      <div>
-        <button style={S.backBtn} onClick={() => setScreen("listing")}>← Back</button>
+      <div style={{ ...SL.wrap, maxWidth:480 }}>
+        <button style={SL.backBtn} onClick={() => setScreen("listing")}>← Back</button>
         <PasswordLogin
+          light
           eyebrow="Guest Profile"
           title="Sign in to bid"
           blurb="Sign in or create an account with email and password. Your star rating is visible to hotels when you bid — no other personal info is shared."
@@ -505,32 +559,33 @@ function GuestView() {
     );
 
     if (screen === "bid") return (
-      <div>
-        <button style={S.backBtn} onClick={() => setScreen("hotel")}>← Back</button>
-        {currentGuest && <div style={{ marginBottom:14 }}><GuestProfileCard guest={currentGuest} compact /></div>}
-        <div style={{ marginBottom:14 }}>
-          <ImageOrIcon url={selectedRoom.imageUrl} type={selectedRoom.image} height={170} />
-          <div style={{ marginTop:10 }}>
-            <div style={S.roomName}>{selectedRoom.name}</div>
-            <div style={S.roomType}>{selectedRoom.type} · {selectedRoom.sqft} sq ft</div>
+      <div style={{ ...SL.wrap, maxWidth:560 }}>
+        <button style={SL.backBtn} onClick={() => setScreen("hotel")}>← Back</button>
+        {currentGuest && <div style={{ marginBottom:14 }}><GuestProfileCard guest={currentGuest} compact light /></div>}
+        <div style={{ ...SL.panel, overflow:"hidden", marginBottom:14 }}>
+          <ImageOrIcon url={selectedRoom.imageUrl} type={selectedRoom.image} height={190} radius={0} />
+          <div style={{ padding:"12px 16px" }}>
+            <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18 }}>{selectedRoom.name}</div>
+            <div style={{ fontSize:13, color:SL.sub, marginTop:2 }}>{selectedRoom.type} · {selectedRoom.sqft} sq ft</div>
           </div>
         </div>
-        <div style={S.formCard}>
-          <div style={S.formTitle}>Your Rate Request</div>
-          <div style={S.formHint}>Rack rate is ${selectedRoom.rack}. The hotel will respond within 10 minutes.</div>
-          <div style={{ fontSize:12, color:"#64748B", marginBottom:14 }}>📅 Tonight · {stayWindow(localDateStr())}</div>
-          <div style={S.amountWrap}>
-            <span style={S.dollarSign}>$</span>
-            <input type="number" placeholder="0" value={bidAmount} onChange={e=>setBidAmount(e.target.value)} style={S.amountInput} min="1" />
-            <span style={S.perNight}>/ night</span>
+        <div style={{ ...SL.panel, padding:20 }}>
+          <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, marginBottom:6 }}>Your Rate Request</div>
+          <div style={{ fontSize:13, color:SL.sub, marginBottom:8, lineHeight:1.55 }}>Rack rate is ${selectedRoom.rack}. The hotel will respond within 10 minutes.</div>
+          <div style={{ fontSize:12, color:SL.sub, marginBottom:14 }}>📅 Tonight · {stayWindow(localDateStr())}</div>
+          <div style={{ display:"flex", alignItems:"baseline", gap:8, borderBottom:"2px solid #F59E0B", paddingBottom:12, marginBottom:18 }}>
+            <span style={{ fontFamily:"Space Grotesk,sans-serif", fontSize:26, fontWeight:700, color:"#F59E0B" }}>$</span>
+            <input type="number" placeholder="0" value={bidAmount} onChange={e=>setBidAmount(e.target.value)} min="1"
+              style={{ flex:1, border:"none", outline:"none", fontFamily:"Space Grotesk,sans-serif", fontSize:42, fontWeight:700, color:"#1A1F2B", width:"100%", background:"transparent" }} />
+            <span style={{ fontSize:13, color:SL.sub, whiteSpace:"nowrap" }}>/ night</span>
           </div>
           {!currentGuest && (
-            <div style={{ padding:"10px 14px", background:"#451A03", borderRadius:8, fontSize:13, color:"#F59E0B", marginBottom:14 }}>
+            <div style={{ padding:"10px 14px", background:"#FEF3E2", borderRadius:8, fontSize:13, color:"#B45309", marginBottom:14 }}>
               Sign in to submit a bid. Hotels will see your rating — nothing else.
             </div>
           )}
-          <div style={S.terms}>If accepted, you'll receive a confirmation code to give the hotel at check-in. No payment is taken here — LastKey just delivers your request.</div>
-          <button style={{ ...S.submitBtn, opacity:(!bidAmount||submitting)?0.4:1 }} disabled={!bidAmount||submitting} onClick={handleBid}>
+          <div style={{ fontSize:12, color:SL.sub, lineHeight:1.6, marginBottom:16 }}>If accepted, you'll receive a confirmation code to give the hotel at check-in. No payment is taken here — LastKey just delivers your request.</div>
+          <button style={{ ...SL.primaryBtn, opacity:(!bidAmount||submitting)?0.4:1 }} disabled={!bidAmount||submitting} onClick={handleBid}>
             {currentGuest ? (submitting ? "Submitting…" : "Submit Rate Request") : "Sign In to Bid"}
           </button>
         </div>
@@ -538,43 +593,43 @@ function GuestView() {
     );
 
     if (screen === "waiting") return (
-      <div style={{ textAlign:"center", paddingTop:40 }}>
+      <div style={{ ...SL.wrap, maxWidth:560, textAlign:"center", paddingTop:48 }}>
         <div style={{ display:"flex", justifyContent:"center", marginBottom:24 }}><TimerRing seconds={timeLeft} /></div>
-        <h2 style={{ ...S.heroTitle, fontSize:22, marginBottom:10 }}>Request Sent</h2>
-        <p style={{ color:"#64748B", maxWidth:300, margin:"0 auto", lineHeight:1.6 }}>
-          <strong style={{ color:"#F7F5F0" }}>{activeBid?.hotel?.name}</strong> is reviewing your ${activeBid?.amount} request for {activeBid?.room?.name}.
+        <h2 style={{ ...SL.h1, fontSize:22, marginBottom:10 }}>Request Sent</h2>
+        <p style={{ color:SL.sub, maxWidth:320, margin:"0 auto", lineHeight:1.6 }}>
+          <strong style={{ color:SL.ink }}>{activeBid?.hotel?.name}</strong> is reviewing your ${activeBid?.amount} request for {activeBid?.room?.name}.
         </p>
-        <div style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:12, padding:"16px 20px", maxWidth:300, margin:"22px auto 0" }}>
+        <div style={{ ...SL.panel, padding:"16px 20px", maxWidth:320, margin:"22px auto 0", textAlign:"left" }}>
           {[["Room", activeBid?.room?.name], ["Stay", stayWindow(activeBid?.stayDate || localDateStr())], ["Your bid","$"+activeBid?.amount], ["Ref", activeBid?.id?.slice(0,8)]].map(([l,v]) => (
-            <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", fontSize:14, borderBottom:"1px solid #1E293B" }}>
-              <span style={{ color:"#64748B" }}>{l}</span>
-              <span style={{ color:l==="Your bid"?"#F59E0B":"#F7F5F0", fontWeight:l==="Your bid"?700:400, fontFamily:l==="Ref"?"monospace":"inherit", fontSize:l==="Ref"?12:14 }}>{v}</span>
+            <div key={l} style={{ display:"flex", justifyContent:"space-between", gap:12, padding:"6px 0", fontSize:14, borderBottom:`1px solid ${SL.line}` }}>
+              <span style={{ color:SL.sub }}>{l}</span>
+              <span style={{ color:l==="Your bid"?"#B45309":SL.ink, fontWeight:l==="Your bid"?700:400, fontFamily:l==="Ref"?"monospace":"inherit", fontSize:l==="Ref"?12:14, textAlign:"right" }}>{v}</span>
             </div>
           ))}
         </div>
-        <p style={{ color:"#334155", fontSize:12, marginTop:16 }}>Check the <strong style={{color:"#94A3B8"}}>Live Requests</strong> tab to track status.</p>
+        <p style={{ color:SL.faint, fontSize:12, marginTop:16 }}>Check the <strong style={{color:SL.sub}}>Live Requests</strong> tab to track status.</p>
       </div>
     );
 
     if (screen === "counter") {
       const bid = bids.find(b=>b.id===activeBid?.id) || activeBid;
       return (
-        <div style={{ textAlign:"center", paddingTop:32 }}>
+        <div style={{ ...SL.wrap, maxWidth:560, textAlign:"center", paddingTop:36 }}>
           <div style={{ fontSize:44, marginBottom:12 }}>🤝</div>
-          <h2 style={{ ...S.heroTitle, fontSize:24, marginBottom:8 }}>Counter Offer</h2>
-          <p style={{ color:"#94A3B8", maxWidth:300, margin:"0 auto 20px", lineHeight:1.6 }}>
+          <h2 style={{ ...SL.h1, fontSize:24, marginBottom:8 }}>Counter Offer</h2>
+          <p style={{ color:SL.sub, maxWidth:320, margin:"0 auto 20px", lineHeight:1.6 }}>
             {bid?.hotel?.name} can't do ${bid?.amount}, but they're offering a counter rate.
           </p>
-          <div style={{ background:"#0F172A", border:"2px solid #A78BFA", borderRadius:14, padding:"24px", maxWidth:300, margin:"0 auto 20px" }}>
-            <div style={{ fontSize:12, color:"#64748B", marginBottom:4 }}>Counter rate offered</div>
-            <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:52, color:"#A78BFA", lineHeight:1 }}>${bid?.counterAmount}</div>
-            <div style={{ fontSize:12, color:"#475569", marginTop:6 }}>vs your bid of ${bid?.amount} · rack ${bid?.room?.rack}</div>
+          <div style={{ ...SL.panel, border:"2px solid #A78BFA", padding:"24px", maxWidth:320, margin:"0 auto 20px" }}>
+            <div style={{ fontSize:12, color:SL.sub, marginBottom:4 }}>Counter rate offered</div>
+            <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:52, color:"#7C3AED", lineHeight:1 }}>${bid?.counterAmount}</div>
+            <div style={{ fontSize:12, color:SL.faint, marginTop:6 }}>vs your bid of ${bid?.amount} · rack ${bid?.room?.rack}</div>
             <div style={{ display:"flex", justifyContent:"center", marginTop:18 }}><TimerRing seconds={counterTimeLeft} total={COUNTER_TIMER} size={90} /></div>
-            <div style={{ fontSize:12, color:"#475569", marginTop:8 }}>Respond before time runs out</div>
+            <div style={{ fontSize:12, color:SL.faint, marginTop:8 }}>Respond before time runs out</div>
           </div>
-          <div style={{ display:"flex", gap:10, maxWidth:300, margin:"0 auto" }}>
-            <button style={{ ...S.submitBtn, flex:1, background:"#A78BFA", color:"#1E0A2E" }} onClick={handleAcceptCounter}>Accept ${bid?.counterAmount}</button>
-            <button style={{ ...S.submitBtn, flex:1, background:"#1E293B", color:"#94A3B8" }} onClick={handleDeclineCounter}>Decline</button>
+          <div style={{ display:"flex", gap:10, maxWidth:320, margin:"0 auto" }}>
+            <button style={{ ...SL.primaryBtn, flex:1, background:"#7C3AED", color:"#fff" }} onClick={handleAcceptCounter}>Accept ${bid?.counterAmount}</button>
+            <button style={{ ...SL.primaryBtn, flex:1, background:"#fff", color:"#374151", border:"1px solid #D1D5DB" }} onClick={handleDeclineCounter}>Decline</button>
           </div>
         </div>
       );
@@ -586,45 +641,45 @@ function GuestView() {
       const accepted = status === "accepted" || status === "handled";
       const expired  = status === "expired";
       return (
-        <div style={{ textAlign:"center", paddingTop:48 }}>
-          <div style={{ width:72, height:72, borderRadius:"50%", background:"#1E293B", display:"flex", alignItems:"center", justifyContent:"center", fontSize:30, margin:"0 auto" }}>
+        <div style={{ ...SL.wrap, maxWidth:560, textAlign:"center", paddingTop:48 }}>
+          <div style={{ width:72, height:72, borderRadius:"50%", background:"#F3F4F6", display:"flex", alignItems:"center", justifyContent:"center", fontSize:30, margin:"0 auto" }}>
             {accepted?"✓":expired?"⏱":"✕"}
           </div>
-          <h2 style={{ ...S.heroTitle, fontSize:26, marginTop:18, color:accepted?"#22C55E":expired?"#64748B":"#EF4444" }}>
+          <h2 style={{ ...SL.h1, fontSize:26, marginTop:18, color:accepted?"#059669":expired?"#6B7280":"#DC2626" }}>
             {accepted?"You're in.":expired?"Time's up.":"Not this time."}
           </h2>
-          <p style={{ color:"#94A3B8", maxWidth:300, margin:"10px auto 0", lineHeight:1.7 }}>
+          <p style={{ color:SL.sub, maxWidth:340, margin:"10px auto 0", lineHeight:1.7 }}>
             {accepted
               ? `Your $${bid?.counterAmount ?? bid?.amount} rate for ${bid?.room?.name} was accepted (${stayWindow(bid?.stayDate || localDateStr())}). Show your confirmation code at check-in.`
               : expired ? "The window closed. Try again — rooms may still be available."
               : "The hotel couldn't accept this rate. Try a different amount or room."}
           </p>
           {accepted && bid?.confirmationCode && (
-            <div style={{ maxWidth:300, margin:"22px auto 0", background:"#052E16", border:"1px solid #22C55E", borderRadius:12, padding:"16px 20px" }}>
-              <div style={{ fontSize:11, color:"#64748B", letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:6 }}>Confirmation Code</div>
-              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:30, color:"#22C55E", letterSpacing:"0.15em" }}>{bid.confirmationCode}</div>
+            <div style={{ maxWidth:320, margin:"22px auto 0", background:"#ECFDF5", border:"1px solid #A7F3D0", borderRadius:12, padding:"16px 20px" }}>
+              <div style={{ fontSize:11, color:"#059669", letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:6, fontWeight:700 }}>Confirmation Code</div>
+              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:30, color:"#047857", letterSpacing:"0.15em" }}>{bid.confirmationCode}</div>
             </div>
           )}
-          <button style={{ ...S.ghostBtn, marginTop:24 }} onClick={reset}>Browse Again</button>
+          <button style={{ ...SL.ghostBtn, marginTop:24 }} onClick={reset}>Browse Again</button>
         </div>
       );
     }
 
     // profile tab
     if (sideTab === "profile") return (
-      <div>
-        <div style={S.sectionLabel}>Your Profile</div>
+      <div style={{ ...SL.wrap, maxWidth:560 }}>
+        <div style={SL.sectionLabel}>Your Profile</div>
         {currentGuest
           ? <>
-              <GuestProfileCard guest={currentGuest} />
-              <div style={{ marginTop:14, fontSize:12, color:"#334155", lineHeight:1.7 }}>
+              <GuestProfileCard guest={currentGuest} light />
+              <div style={{ marginTop:14, fontSize:12, color:SL.sub, lineHeight:1.7 }}>
                 Hotels see only your star rating and stay count — no name, email, or demographic info. This prevents discrimination while letting hotels make informed decisions.
               </div>
-              <button style={{ ...S.ghostBtn, marginTop:20 }} onClick={handleSignOut}>Sign Out</button>
+              <button style={{ ...SL.ghostBtn, marginTop:20 }} onClick={handleSignOut}>Sign Out</button>
             </>
-          : <div style={S.emptyState}>
-              <div style={{ marginBottom:8, fontSize:15, fontWeight:600 }}>Not signed in</div>
-              <button style={S.submitBtn} onClick={()=>setScreen("login")}>Sign In / Join</button>
+          : <div style={{ ...SL.panel, padding:"40px 28px", textAlign:"center" }}>
+              <div style={{ marginBottom:12, fontSize:15, fontWeight:600 }}>Not signed in</div>
+              <button style={{ ...SL.primaryBtn, maxWidth:220, margin:"0 auto" }} onClick={()=>setScreen("login")}>Sign In / Join</button>
             </div>
         }
       </div>
@@ -636,23 +691,23 @@ function GuestView() {
   // ── Live requests panel (sidebar tab content) ──────────────────────────────
   function renderSideContent() {
     if (sideTab === "live") return (
-      <div style={{ padding:"20px 16px" }}>
-        <div style={{ fontSize:11, color:"#475569", letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:600, marginBottom:14 }}>Live Requests</div>
+      <div style={{ ...SL.wrap, maxWidth:640 }}>
+        <h1 style={{ ...SL.h1, marginBottom:18 }}>Live Requests</h1>
         {myLive.length === 0
-          ? <div style={{ fontSize:13, color:"#334155", textAlign:"center", padding:"32px 0" }}>No active requests.<br/>Submit a bid to get started.</div>
+          ? <div style={{ ...SL.panel, padding:"40px 28px", textAlign:"center", color:SL.sub, fontSize:14 }}>No active requests.<br/>Submit a bid to get started.</div>
           : myLive.map(b => (
-            <div key={b.id} style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:10, padding:"14px", marginBottom:10 }}>
+            <div key={b.id} style={{ ...SL.panel, padding:"14px 16px", marginBottom:12 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
                 <div>
-                  <div style={{ fontWeight:700, fontSize:13 }}>{b.room.name}</div>
-                  <div style={{ fontSize:11, color:"#475569", marginTop:2 }}>{b.hotel.name}</div>
-                  <div style={{ fontSize:11, color:"#475569", marginTop:2 }}>📅 {shortDate(b.stayDate)}</div>
+                  <div style={{ fontWeight:700, fontSize:14 }}>{b.room.name}</div>
+                  <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>{b.hotel.name}</div>
+                  <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>📅 {shortDate(b.stayDate)}</div>
                 </div>
-                <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, color: b.status==="countered"?"#A78BFA":"#F59E0B" }}>${b.status==="countered"?b.counterAmount:b.amount}</div>
+                <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, color: b.status==="countered"?"#7C3AED":"#B45309" }}>${b.status==="countered"?b.counterAmount:b.amount}</div>
               </div>
               <Badge status={effectiveStatus(b)} />
               {b.status === "countered" && (
-                <button style={{ ...S.submitBtn, marginTop:10, padding:"9px 0", fontSize:13, background:"#A78BFA", color:"#1E0A2E" }}
+                <button style={{ ...SL.primaryBtn, marginTop:10, padding:"10px 0", fontSize:13, background:"#7C3AED", color:"#fff" }}
                   onClick={()=>{ setActiveBid(b); setSelectedHotel(b.hotel); setSelectedRoom(b.room); setCTL(secondsLeft(b)); setScreen("counter"); }}>
                   View Counter Offer →
                 </button>
@@ -664,23 +719,23 @@ function GuestView() {
     );
 
     if (sideTab === "history") return (
-      <div style={{ padding:"20px 16px" }}>
-        <div style={{ fontSize:11, color:"#475569", letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:600, marginBottom:14 }}>History</div>
+      <div style={{ ...SL.wrap, maxWidth:640 }}>
+        <h1 style={{ ...SL.h1, marginBottom:18 }}>History</h1>
         {myHistory.length === 0
-          ? <div style={{ fontSize:13, color:"#334155", textAlign:"center", padding:"32px 0" }}>No completed requests yet.</div>
+          ? <div style={{ ...SL.panel, padding:"40px 28px", textAlign:"center", color:SL.sub, fontSize:14 }}>No completed requests yet.</div>
           : myHistory.map(b => (
-            <div key={b.id} style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:10, padding:"14px", marginBottom:10 }}>
+            <div key={b.id} style={{ ...SL.panel, padding:"14px 16px", marginBottom:12 }}>
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
                 <div>
-                  <div style={{ fontWeight:700, fontSize:13 }}>{b.room.name}</div>
-                  <div style={{ fontSize:11, color:"#475569", marginTop:1 }}>{b.hotel.name}</div>
-                  <div style={{ fontSize:11, color:"#475569", marginTop:1 }}>📅 {shortDate(b.stayDate)}</div>
+                  <div style={{ fontWeight:700, fontSize:14 }}>{b.room.name}</div>
+                  <div style={{ fontSize:12, color:SL.sub, marginTop:1 }}>{b.hotel.name}</div>
+                  <div style={{ fontSize:12, color:SL.sub, marginTop:1 }}>📅 {shortDate(b.stayDate)}</div>
                 </div>
-                <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16, color:["accepted","handled"].includes(b.status)?"#22C55E":"#64748B" }}>${b.counterAmount ?? b.amount}</div>
+                <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16, color:["accepted","handled"].includes(b.status)?"#059669":SL.faint }}>${b.counterAmount ?? b.amount}</div>
               </div>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <Badge status={effectiveStatus(b)} />
-                <span style={{ fontSize:11, color:"#334155" }}>Rack ${b.room.rack}</span>
+                <span style={{ fontSize:12, color:SL.faint }}>Rack ${b.room.rack}</span>
               </div>
             </div>
           ))
@@ -695,7 +750,7 @@ function GuestView() {
   const showPanel = panelTabs.includes(sideTab);
 
   return (
-    <div style={{ minHeight:"100vh", background:"#0A0F1E", color:"#F7F5F0", fontFamily:"Inter,sans-serif", display:"flex" }}>
+    <div style={SL.page}>
       {counterToast && (
         <div style={{ ...S.toast, borderColor:"#A78BFA" }}>
           <span style={{ ...S.toastDot, background:"#A78BFA" }} />
@@ -706,24 +761,24 @@ function GuestView() {
         </div>
       )}
 
-      <div style={{ ...S.sidebar, width:200 }}>
-        <div style={S.sidebarTop}>
-          <div style={S.logo}>LK</div>
+      <div style={{ ...SL.sidebar, width:210 }}>
+        <div style={{ marginBottom:24, display:"flex", alignItems:"center", gap:10 }}>
+          <div style={SL.logo}>LK</div>
           {currentGuest
-            ? <div style={{ marginTop:10 }}>
-                <div style={{ fontWeight:700, fontSize:13, lineHeight:1.2 }}>{currentGuest.name}</div>
-                <div style={{ fontSize:11, color:"#475569", marginTop:3 }}>
+            ? <div>
+                <div style={{ fontWeight:700, fontSize:13, lineHeight:1.2, color:SL.ink }}>{currentGuest.name}</div>
+                <div style={{ fontSize:11, color:SL.faint, marginTop:3 }}>
                   {currentGuest.rating > 0 ? `⭐ ${currentGuest.rating.toFixed(1)}` : "New member"} · {currentGuest.stays} stays
                 </div>
               </div>
-            : <div style={{ marginTop:10 }}>
-                <div style={{ fontWeight:600, fontSize:13 }}>LastKey</div>
-                <div style={{ fontSize:11, color:"#475569", marginTop:2 }}>Private rate requests</div>
+            : <div>
+                <div style={{ fontWeight:700, fontSize:14, color:SL.ink }}>LastKey</div>
+                <div style={{ fontSize:11, color:SL.faint, marginTop:2 }}>Private rate requests</div>
               </div>
           }
         </div>
 
-        <div style={S.sidebarNav}>
+        <div style={{ display:"flex", flexDirection:"column", gap:2, flex:1 }}>
           {[
             { id:"browse",  label:"Browse Hotels" },
             { id:"live",    label:"Live Requests", count: myLive.length },
@@ -731,22 +786,22 @@ function GuestView() {
             { id:"profile", label: currentGuest ? "My Profile" : "Sign In" },
           ].map(tab => (
             <button key={tab.id}
-              style={{ ...S.navItem, ...(sideTab===tab.id && (showPanel || ["profile"].includes(tab.id) || screen==="listing") ? S.navActive : {}) }}
+              style={{ ...SL.navItem, ...(sideTab===tab.id && (showPanel || ["profile"].includes(tab.id) || screen==="listing") ? SL.navActive : {}) }}
               onClick={() => { setSideTab(tab.id); if (!panelTabs.includes(tab.id)) setScreen(tab.id === "browse" ? "listing" : tab.id); }}>
               {tab.label}
-              {tab.count > 0 && <span style={S.navBadge}>{tab.count}</span>}
+              {tab.count > 0 && <span style={SL.navBadge}>{tab.count}</span>}
             </button>
           ))}
         </div>
 
         {!currentGuest && (
-          <button style={{ ...S.ghostBtn, margin:"0 0 8px", fontSize:12, padding:"9px 12px", textAlign:"center" }} onClick={()=>setScreen("login")}>
+          <button style={{ ...SL.ghostBtn, margin:"0 0 8px", fontSize:12, padding:"10px 12px", textAlign:"center" }} onClick={()=>setScreen("login")}>
             Sign In / Join
           </button>
         )}
       </div>
 
-      <div style={{ flex:1, overflowY:"auto", padding: (!showPanel && screen==="listing") ? 0 : "28px 28px 60px" }}>
+      <div style={{ ...SL.content, padding: 0 }}>
         {showPanel ? renderSideContent() : renderMain()}
       </div>
     </div>
@@ -1425,8 +1480,20 @@ const S = {
   toastDot:       { width:8, height:8, borderRadius:"50%", background:"#22C55E", marginTop:4, flexShrink:0, animation:"pulse 1.5s infinite" },
 };
 
-// Light styles — used only by the guest Home/browse page (HotelListingView).
+// Light styles — used by the whole guest flow (browse, detail, bid, etc.).
 const SL = {
+  // palette
+  ink:"#1A1F2B", sub:"#6B7280", faint:"#9CA3AF", line:"#E5E7EB", amber:"#F59E0B", price:"#0F766E",
+  // page + layout
+  page:         { background:"#F4F5F7", color:"#1A1F2B", fontFamily:"Inter,sans-serif", minHeight:"100vh", display:"flex" },
+  content:      { flex:1, overflowY:"auto", background:"#F4F5F7" },
+  wrap:         { maxWidth:760, margin:"0 auto", padding:"28px 24px 64px" },
+  wrapWide:     { maxWidth:1040, margin:"0 auto", padding:"24px 24px 64px" },
+  h1:           { fontFamily:"Space Grotesk,sans-serif", fontWeight:700, letterSpacing:"-0.5px", color:"#1A1F2B", margin:0, fontSize:24 },
+  sectionLabel: { fontSize:11, letterSpacing:"0.1em", textTransform:"uppercase", color:"#9CA3AF", fontWeight:700, marginBottom:12 },
+  backBtn:      { background:"none", border:"none", color:"#6B7280", cursor:"pointer", fontSize:14, padding:0, marginBottom:18, fontFamily:"Inter,sans-serif" },
+  panel:        { background:"#fff", border:"1px solid #E5E7EB", borderRadius:16, boxShadow:"0 1px 3px rgba(0,0,0,0.06)" },
+  // home search
   searchBar:    { display:"flex", alignItems:"center", background:"#fff", borderRadius:14, boxShadow:"0 12px 40px rgba(0,0,0,0.25)", maxWidth:760, margin:"0 auto", padding:"12px 12px 12px 0", color:"#1A1F2B" },
   searchLabel:  { fontSize:11, fontWeight:700, color:"#1A1F2B", marginBottom:2 },
   searchInput:  { border:"none", outline:"none", fontSize:14, color:"#1A1F2B", width:"100%", fontFamily:"Inter,sans-serif", background:"transparent" },
@@ -1435,4 +1502,15 @@ const SL = {
   searchBtn:    { width:50, height:50, borderRadius:"50%", border:"none", background:"#F59E0B", color:"#0A0F1E", fontSize:18, cursor:"pointer", flexShrink:0, marginLeft:8 },
   card:         { background:"#fff", border:"1px solid #E5E7EB", borderRadius:16, overflow:"hidden", cursor:"pointer", boxShadow:"0 1px 3px rgba(0,0,0,0.06)", transition:"box-shadow 0.2s, transform 0.2s" },
   tonightTag:   { position:"absolute", top:12, left:12, background:"rgba(15,23,42,0.85)", color:"#fff", fontSize:11, fontWeight:600, padding:"5px 10px", borderRadius:20 },
+  // forms / buttons
+  field:        { background:"#fff", border:"1px solid #D1D5DB", borderRadius:10, padding:"11px 14px", color:"#1A1F2B", fontSize:14, outline:"none", fontFamily:"Inter,sans-serif", width:"100%", boxSizing:"border-box" },
+  primaryBtn:   { width:"100%", padding:"13px 0", background:"#F59E0B", color:"#0A0F1E", border:"none", borderRadius:12, fontWeight:700, fontSize:15, fontFamily:"Inter,sans-serif", cursor:"pointer", display:"block" },
+  ghostBtn:     { background:"#fff", border:"1px solid #D1D5DB", color:"#374151", borderRadius:10, padding:"10px 16px", fontSize:13, fontFamily:"Inter,sans-serif", cursor:"pointer", fontWeight:600 },
+  amenityTag:   { fontSize:11, padding:"4px 9px", borderRadius:6, background:"#F3F4F6", color:"#374151", fontWeight:500 },
+  // sidebar (light)
+  sidebar:      { width:220, flexShrink:0, background:"#fff", borderRight:"1px solid #E5E7EB", padding:"22px 14px", display:"flex", flexDirection:"column" },
+  navItem:      { width:"100%", padding:"10px 12px", borderRadius:10, border:"none", background:"none", color:"#6B7280", cursor:"pointer", textAlign:"left", fontSize:13.5, fontFamily:"Inter,sans-serif", fontWeight:600, display:"flex", justifyContent:"space-between", alignItems:"center" },
+  navActive:    { background:"#FEF3E2", color:"#B45309" },
+  navBadge:     { background:"#F59E0B", color:"#0A0F1E", fontSize:10, fontWeight:700, padding:"2px 6px", borderRadius:8 },
+  logo:         { width:38, height:38, borderRadius:10, background:"#F59E0B", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:13, color:"#0A0F1E", flexShrink:0 },
 };
