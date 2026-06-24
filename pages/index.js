@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
 import * as api from "../lib/api";
-import { TIMER_SECONDS, COUNTER_TIMER, effectiveStatus, secondsLeft, localDateStr } from "../lib/api";
+import { TIMER_SECONDS, COUNTER_TIMER, TAX_RATE, effectiveStatus, secondsLeft, localDateStr } from "../lib/api";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
-const TAX_RATE = 0.14; // estimated taxes & fees shown in the bid confirmation breakdown
 
 function fmt(secs) {
   const m = Math.floor(secs / 60);
@@ -515,7 +514,7 @@ function GuestView() {
 
   async function handleBid() {
     if (!currentGuest) { setScreen("login"); return; }
-    const amount = parseInt(bidAmount);
+    const amount = Math.round(Number(bidAmount));
     if (!amount || amount < 1) return;
     // Defensive: prevent a second open request at the same hotel.
     if (myLive.some(b => b.hotel?.id === selectedHotel?.id)) {
@@ -818,8 +817,8 @@ function GuestView() {
             </div>
           )}
           <div style={{ fontSize:12, color:SL.sub, lineHeight:1.6, marginBottom:16 }}>If accepted, you'll receive a confirmation code to give the hotel at check-in. No payment is taken here — LastKey just delivers your request.</div>
-          <button style={{ ...SL.primaryBtn, opacity:(!bidAmount)?0.4:1 }} disabled={!bidAmount}
-            onClick={() => { if (!currentGuest) { setScreen("login"); return; } if (!bidAmount || parseInt(bidAmount) < 1) return; setAgreeTerms(false); setScreen("confirm"); }}>
+          <button style={{ ...SL.primaryBtn, opacity:!(Number(bidAmount)>=1)?0.4:1 }} disabled={!(Number(bidAmount)>=1)}
+            onClick={() => { if (!currentGuest) { setScreen("login"); return; } if (!(Number(bidAmount)>=1)) return; setAgreeTerms(false); setScreen("confirm"); }}>
             {currentGuest ? "Review Request →" : "Sign In to Bid"}
           </button>
         </div>
@@ -827,7 +826,7 @@ function GuestView() {
     );
 
     if (screen === "confirm") {
-      const rate = parseInt(bidAmount) || 0;
+      const rate = Math.round(Number(bidAmount)) || 0;
       const taxes = Math.round(rate * TAX_RATE);
       const total = rate + taxes;
       return (
@@ -1113,7 +1112,7 @@ function GuestView() {
             { id:"profile", label: currentGuest ? "My Profile" : "Sign In" },
           ].map(tab => (
             <button key={tab.id}
-              style={{ ...SL.navItem, ...(sideTab===tab.id && (showPanel || ["profile"].includes(tab.id) || screen==="listing") ? SL.navActive : {}) }}
+              style={{ ...SL.navItem, ...(sideTab===tab.id ? SL.navActive : {}) }}
               onClick={() => { setSideTab(tab.id); if (!panelTabs.includes(tab.id)) setScreen(tab.id === "browse" ? "listing" : tab.id); }}>
               {tab.label}
               {tab.count > 0 && <span style={SL.navBadge}>{tab.count}</span>}
@@ -1550,9 +1549,9 @@ function HotelDashboard() {
                                 onChange={e=>setCounterInputs(p=>({...p,[bid.id]:e.target.value}))}
                                 style={{ background:"none", border:"none", outline:"none", color:"#1A1F2B", fontSize:15, fontWeight:700, fontFamily:"Space Grotesk,sans-serif", width:"100%", padding:"8px 6px" }} />
                             </div>
-                            <button style={{ ...SL.decideBtn, background:"#7C3AED", color:"#fff", padding:"10px 14px", flexShrink:0, opacity:!cv?0.4:1 }}
-                              disabled={!cv}
-                              onClick={()=>{ onCounter(bid.id, parseInt(cv)); setCounterInputs(p=>({...p,[bid.id]:""})); }}>
+                            <button style={{ ...SL.decideBtn, background:"#7C3AED", color:"#fff", padding:"10px 14px", flexShrink:0, opacity:!(Number(cv)>0)?0.4:1 }}
+                              disabled={!(Number(cv)>0)}
+                              onClick={()=>{ const amt = Math.round(Number(cv)); if (!amt || amt<=0) return; onCounter(bid.id, amt); setCounterInputs(p=>({...p,[bid.id]:""})); }}>
                               Send Counter
                             </button>
                           </div>
@@ -1856,7 +1855,7 @@ const SL = {
   dashWrap:       { height:"100vh", background:"#F4F5F7", color:"#1A1F2B", fontFamily:"Inter,sans-serif", display:"flex", overflow:"hidden" },
   sidebarTop:     { marginBottom:22 },
   sidebarNav:     { display:"flex", flexDirection:"column", gap:2, flex:1 },
-  dashMain:       { flex:1, padding:"26px 30px", overflowY:"auto" },
+  dashMain:       { flex:1, padding:"64px 30px 26px", overflowY:"auto" },
   dashSectionHead:{ marginBottom:22 },
   dashTitle:      { fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:22, margin:"0 0 4px", color:"#1A1F2B" },
   bidCard:        { background:"#fff", border:"1px solid #E5E7EB", borderRadius:16, padding:20, boxShadow:"0 1px 3px rgba(0,0,0,0.06)" },
