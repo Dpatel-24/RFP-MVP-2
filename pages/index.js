@@ -1033,7 +1033,7 @@ function GuestView() {
       const dayBids = myBids.filter(b => b.stayDate === guestDate);
       return (
         <div style={{ ...SL.wrap, maxWidth:760 }}>
-          <h1 style={{ ...SL.h1, marginBottom:18 }}>Reservations</h1>
+          <h1 style={{ ...SL.h1, marginBottom:18 }}>History</h1>
           <BookingCalendar light bids={myBids} selectedDate={guestDate} onSelect={setGuestDate} />
           <div style={SL.sectionLabel}>{shortDate(guestDate)} · {dayBids.length} request{dayBids.length===1?"":"s"}</div>
           {dayBids.length === 0
@@ -1079,11 +1079,11 @@ function GuestView() {
   return (
     <div style={SL.page}>
       {counterToast && (
-        <div style={{ ...S.toast, borderColor:"#A78BFA" }}>
-          <span style={{ ...S.toastDot, background:"#A78BFA" }} />
+        <div style={{ ...SL.toast, borderColor:"#A78BFA" }}>
+          <span style={{ ...SL.toastDot, background:"#A78BFA" }} />
           <div>
-            <div style={{ fontWeight:600, fontSize:14 }}>Counter Offer Received</div>
-            <div style={{ fontSize:12, color:"#94A3B8", marginTop:2 }}>The hotel sent a counter rate. Check Live Requests.</div>
+            <div style={{ fontWeight:700, fontSize:14, color:"#1A1F2B" }}>Counter Offer Received</div>
+            <div style={{ fontSize:12, color:"#6B7280", marginTop:2 }}>The hotel sent a counter rate. Check Live Requests.</div>
           </div>
         </div>
       )}
@@ -1229,43 +1229,43 @@ function KPIPanel({ bids, totalRooms = 0, dateLabel }) {
   const countered     = bids.filter(b=>b.status==="countered");
 
   const kpis = [
-    { label:"Revenue Recovered",  value:revenue?`$${revenue}`:"$0",        sub:"vs $0 empty rooms",            color:"#22C55E" },
-    { label:"Accept Rate",        value:`${acceptRate}%`,                   sub:`${accepted.length} of ${total} bids`, color:"#F59E0B" },
-    { label:"Avg Accepted Bid",   value:avgAccepted?`$${avgAccepted}`:"—",  sub:`Avg all bids $${avgBid}`,      color:"#F7F5F0" },
-    { label:"Bid-to-Rack Ratio",  value:`${avgBidToRack}%`,                 sub:"of rack rate captured",        color:"#A78BFA" },
-    { label:"Discount vs Rack",   value:`${discountVsRack}%`,               sub:"below rack on accepted bids",  color:"#64748B" },
-    { label:"Counter Offers Sent",value:countered.length,                   sub:"awaiting guest response",      color:"#F59E0B" },
-    { label:"Total Requests",     value:total,                              sub:`${declined.length} declined · ${expired.length} expired`, color:"#F7F5F0" },
-    { label:"Rooms Still Empty",  value:Math.max(0,totalRooms-accepted.length), sub:`out of ${totalRooms} available tonight`, color:totalRooms>0&&accepted.length>=totalRooms?"#22C55E":"#EF4444" },
+    { label:"Revenue Recovered",  value:revenue?`$${revenue}`:"$0",        sub:"vs $0 empty rooms",            color:"#15803D" },
+    { label:"Accept Rate",        value:`${acceptRate}%`,                   sub:`${accepted.length} of ${total} bids`, color:"#B45309" },
+    { label:"Avg Accepted Bid",   value:avgAccepted?`$${avgAccepted}`:"—",  sub:`Avg all bids $${avgBid}`,      color:"#1A1F2B" },
+    { label:"Bid-to-Rack Ratio",  value:`${avgBidToRack}%`,                 sub:"of rack rate captured",        color:"#7C3AED" },
+    { label:"Discount vs Rack",   value:`${discountVsRack}%`,               sub:"below rack on accepted bids",  color:"#6B7280" },
+    { label:"Counter Offers Sent",value:countered.length,                   sub:"awaiting guest response",      color:"#B45309" },
+    { label:"Total Requests",     value:total,                              sub:`${declined.length} declined · ${expired.length} expired`, color:"#1A1F2B" },
+    { label:"Rooms Still Empty",  value:Math.max(0,totalRooms-accepted.length), sub:`out of ${totalRooms} available tonight`, color:totalRooms>0&&accepted.length>=totalRooms?"#15803D":"#DC2626" },
   ];
 
   return (
     <div>
       {total === 0 && (
-        <div style={{ ...S.emptyState, marginBottom:20 }}>
-          <div style={{ color:"#475569", fontSize:13 }}>No requests on {dateLabel || "this day"}.</div>
+        <div style={{ ...SL.emptyState, marginBottom:20 }}>
+          <div style={{ color:"#6B7280", fontSize:13 }}>No requests on {dateLabel || "this day"}.</div>
         </div>
       )}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(195px, 1fr))", gap:12, marginBottom:28 }}>
         {kpis.map(k => (
-          <div key={k.label} style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:12, padding:"16px 18px" }}>
-            <div style={{ fontSize:11, color:"#475569", letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:7 }}>{k.label}</div>
+          <div key={k.label} style={{ ...SL.panel, padding:"16px 18px" }}>
+            <div style={{ fontSize:11, color:"#9CA3AF", letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:7, fontWeight:600 }}>{k.label}</div>
             <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:26, color:k.color, lineHeight:1 }}>{k.value}</div>
-            <div style={{ fontSize:12, color:"#334155", marginTop:6 }}>{k.sub}</div>
+            <div style={{ fontSize:12, color:"#6B7280", marginTop:6 }}>{k.sub}</div>
           </div>
         ))}
       </div>
       {total > 0 && (
-        <div style={{ background:"#0F172A", border:"1px solid #1E293B", borderRadius:12, padding:"18px 20px" }}>
-          <div style={{ fontSize:12, color:"#475569", marginBottom:14, textTransform:"uppercase", letterSpacing:"0.08em" }}>Bid Distribution</div>
+        <div style={{ ...SL.panel, padding:"18px 20px" }}>
+          <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:14, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:600 }}>Bid Distribution</div>
           {bids.slice().reverse().map(b => (
             <div key={b.id} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:8 }}>
-              <div style={{ width:72, fontSize:12, color:"#475569", flexShrink:0 }}>{b.room.name.split(" ")[0]}</div>
-              <div style={{ flex:1, background:"#1E293B", borderRadius:4, height:8, overflow:"hidden" }}>
+              <div style={{ width:72, fontSize:12, color:"#9CA3AF", flexShrink:0 }}>{b.room.name.split(" ")[0]}</div>
+              <div style={{ flex:1, background:"#E5E7EB", borderRadius:4, height:8, overflow:"hidden" }}>
                 <div style={{ width:`${Math.min(100,(amt(b)/b.room.rack)*100)}%`, height:"100%", borderRadius:4,
-                  background:["accepted","handled"].includes(b.status)?"#22C55E":b.status==="countered"?"#A78BFA":b.status==="pending"?"#F59E0B":"#EF4444" }} />
+                  background:["accepted","handled"].includes(b.status)?"#16A34A":b.status==="countered"?"#7C3AED":b.status==="pending"?"#F59E0B":"#EF4444" }} />
               </div>
-              <div style={{ width:36, fontSize:12, fontWeight:700, color:"#F7F5F0", textAlign:"right" }}>${amt(b)}</div>
+              <div style={{ width:36, fontSize:12, fontWeight:700, color:"#1A1F2B", textAlign:"right" }}>${amt(b)}</div>
               <div style={{ width:60, flexShrink:0 }}><Badge status={b.status} /></div>
             </div>
           ))}
@@ -1293,7 +1293,7 @@ function HotelDashboard() {
   const [selectedDate, setSelectedDate] = useState(localDateStr());
   const [showAdd, setShowAdd]           = useState(false);
   const [newRoom, setNewRoom]           = useState({ name:"", room_type:"", rack_rate:"", bid_floor:"", inventory_count:"1", amenities:"" });
-  const prevCount = useRef(0);
+  const prevCount = useRef(null); // null until first bids load — avoids a false toast on mount
 
   const refreshBids = useCallback(async (h) => {
     const hot = h || hotel;
@@ -1336,12 +1336,13 @@ function HotelDashboard() {
 
   // ── New-request toast ──────────────────────────────────────────────────────
   useEffect(() => {
-    const pendings = bids.filter(b => b.status === "pending");
-    if (pendings.length > prevCount.current) {
+    const pendings = bids.filter(b => b.status === "pending").length;
+    // Only toast on a genuine increase, never on the first load (baseline).
+    if (prevCount.current !== null && pendings > prevCount.current) {
       setNotification(bids[0]);
       setTimeout(() => setNotification(null), 5000);
     }
-    prevCount.current = pendings.length;
+    prevCount.current = pendings;
   }, [bids]);
 
   async function onDecide(id, status) {
