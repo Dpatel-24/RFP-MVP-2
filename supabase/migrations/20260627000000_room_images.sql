@@ -1,9 +1,9 @@
 -- Room photos: adds rooms.image_url + a public "room-images" storage bucket
 -- with owner-scoped write policies. Wired in lib/api.js via uploadRoomImage().
 --
--- App upload path: "{hotelId}/{roomId}/{filename}" — so the FIRST folder
--- segment of a stored object's name is the hotel id, which the write policies
--- check against hotels.owner_user_id.
+-- App upload path: "{hotelId}/{roomId}/cover" (one stable key per room, so
+-- re-uploads overwrite in place) — the FIRST folder segment is the hotel id,
+-- which the write policies check against hotels.owner_user_id.
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 1. Column to hold the room's photo public URL.
