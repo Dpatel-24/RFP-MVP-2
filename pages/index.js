@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
 import * as api from "../lib/api";
-import { TIMER_SECONDS, COUNTER_TIMER, TAX_RATE, effectiveStatus, secondsLeft, localDateStr } from "../lib/api";
+import { TIMER_SECONDS, COUNTER_TIMER, TAX_RATE, effectiveStatus, secondsLeft, getTodayKey } from "../lib/api";
 import {
   shortDate, stayWindow, useWindowWidth, MOBILE_BREAKPOINT, BOTTOM_NAV_HEIGHT,
   TimerRing, ImageOrIcon, Badge, StarDisplay, GuestProfileCard, PasswordLogin,
@@ -207,7 +207,7 @@ function GuestView() {
   const [currentGuest, setCurrentGuest]   = useState(null);
   const [counterToast, setCounterToast]   = useState(false);
   const [submitting, setSubmitting]       = useState(false);
-  const [guestDate, setGuestDate]         = useState(localDateStr());
+  const [guestDate, setGuestDate]         = useState(getTodayKey());
   const [agreeTerms, setAgreeTerms]       = useState(false);
   const [now, setNow]                     = useState(Date.now());
   const timerRef = useRef(null);
@@ -534,7 +534,7 @@ function GuestView() {
             <div style={{ ...SL.panel, padding:18 }}>
               <div style={{ fontSize:11, color:SL.faint, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700 }}>Your stay</div>
               <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:17, marginTop:6 }}>Tonight</div>
-              <div style={{ fontSize:13, color:SL.sub, marginTop:2 }}>{stayWindow(localDateStr())}</div>
+              <div style={{ fontSize:13, color:SL.sub, marginTop:2 }}>{stayWindow(getTodayKey())}</div>
               <div style={{ borderTop:`1px solid ${SL.line}`, margin:"14px 0" }} />
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:14, marginBottom:8 }}>
                 <span style={{ color:SL.sub }}>Rooms available</span><strong>{selectedHotel.rooms.length}</strong>
@@ -591,7 +591,7 @@ function GuestView() {
         <div style={{ ...SL.panel, padding:20 }}>
           <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, marginBottom:6 }}>Your Rate Request</div>
           <div style={{ fontSize:13, color:SL.sub, marginBottom:8, lineHeight:1.55 }}>Rack rate is ${selectedRoom.rack}. The hotel will respond within 10 minutes.</div>
-          <div style={{ fontSize:12, color:SL.sub, marginBottom:14 }}>📅 Tonight · {stayWindow(localDateStr())}</div>
+          <div style={{ fontSize:12, color:SL.sub, marginBottom:14 }}>📅 Tonight · {stayWindow(getTodayKey())}</div>
           <div style={{ display:"flex", alignItems:"baseline", gap:8, borderBottom:"2px solid #F59E0B", paddingBottom:12, marginBottom:18 }}>
             <span style={{ fontFamily:"Space Grotesk,sans-serif", fontSize:26, fontWeight:700, color:"#F59E0B" }}>$</span>
             <input type="number" placeholder="0" value={bidAmount} onChange={e=>setBidAmount(e.target.value)} min="1"
@@ -628,7 +628,7 @@ function GuestView() {
             <div>
               <div style={{ fontWeight:700, fontSize:15 }}>{selectedRoom?.name}</div>
               <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>{selectedHotel?.name}</div>
-              <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>📅 {stayWindow(localDateStr())}</div>
+              <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>📅 {stayWindow(getTodayKey())}</div>
             </div>
           </div>
 
@@ -668,7 +668,7 @@ function GuestView() {
           <strong style={{ color:SL.ink }}>{activeBid?.hotel?.name}</strong> is reviewing your ${activeBid?.amount} request for {activeBid?.room?.name}.
         </p>
         <div style={{ ...SL.panel, padding:"16px 20px", maxWidth:320, margin:"22px auto 0", textAlign:"left" }}>
-          {[["Room", activeBid?.room?.name], ["Stay", stayWindow(activeBid?.stayDate || localDateStr())], ["Your bid","$"+activeBid?.amount], ["Ref", activeBid?.id?.slice(0,8)]].map(([l,v]) => (
+          {[["Room", activeBid?.room?.name], ["Stay", stayWindow(activeBid?.stayDate || getTodayKey())], ["Your bid","$"+activeBid?.amount], ["Ref", activeBid?.id?.slice(0,8)]].map(([l,v]) => (
             <div key={l} style={{ display:"flex", justifyContent:"space-between", gap:12, padding:"6px 0", fontSize:14, borderBottom:`1px solid ${SL.line}` }}>
               <span style={{ color:SL.sub }}>{l}</span>
               <span style={{ color:l==="Your bid"?"#B45309":SL.ink, fontWeight:l==="Your bid"?700:400, fontFamily:l==="Ref"?"monospace":"inherit", fontSize:l==="Ref"?12:14, textAlign:"right" }}>{v}</span>
@@ -718,7 +718,7 @@ function GuestView() {
           </h2>
           <p style={{ color:SL.sub, maxWidth:340, margin:"10px auto 0", lineHeight:1.7 }}>
             {accepted
-              ? `Your $${bid?.counterAmount ?? bid?.amount} rate for ${bid?.room?.name} was accepted (${stayWindow(bid?.stayDate || localDateStr())}). Show your confirmation code at check-in.`
+              ? `Your $${bid?.counterAmount ?? bid?.amount} rate for ${bid?.room?.name} was accepted (${stayWindow(bid?.stayDate || getTodayKey())}). Show your confirmation code at check-in.`
               : expired ? "The window closed. Try again — rooms may still be available."
               : "The hotel couldn't accept this rate. Try a different amount or room."}
           </p>

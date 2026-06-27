@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
 import * as api from "../lib/api";
-import { effectiveStatus, localDateStr } from "../lib/api";
+import { effectiveStatus, getTodayKey } from "../lib/api";
 import {
   shortDate, useWindowWidth, MOBILE_BREAKPOINT, BOTTOM_NAV_HEIGHT,
   TimerRing, ImageOrIcon, Badge, StarDisplay, GuestProfileCard, PasswordLogin,
@@ -83,7 +83,7 @@ function HotelDashboard() {
   const [counterInputs, setCounterInputs] = useState({});
   const [notification, setNotification] = useState(null);
   const [expandedGuest, setExpandedGuest] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(localDateStr());
+  const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [showAdd, setShowAdd]           = useState(false);
   const [newRoom, setNewRoom]           = useState({ name:"", room_type:"", rack_rate:"", bid_floor:"", inventory_count:"1", amenities:"" });
   const prevCount = useRef(null); // null until first bids load — avoids a false toast on mount
@@ -198,8 +198,11 @@ function HotelDashboard() {
   const dayBids = bids.filter(b => b.stayDate === selectedDate);
 
   const liveBids = bids.filter(b => effectiveStatus(b) === "pending");
-  const histBids = bids.filter(b => effectiveStatus(b) !== "pending");
   const accepted = bids.filter(b => ["accepted","handled"].includes(b.status));
+  // "Tonight" stats are scoped to the current 6 AM-boundary booking day.
+  const todayKey = getTodayKey();
+  const todayAccepted = accepted.filter(b => b.stayDate === todayKey);
+  const todayRevenue = todayAccepted.reduce((s,b) => s + (b.counterAmount ?? b.amount), 0);
 
   // ── Auth gate ──────────────────────────────────────────────────────────────
   if (session === undefined) {
@@ -256,7 +259,7 @@ function HotelDashboard() {
         <div style={SL.sidebarNav}>
           {[
             { id:"live",    label:"Live Requests", count:liveBids.length },
-            { id:"history", label:"Reservations",  count:histBids.length },
+            { id:"history", label:"Reservations",  count:liveBids.length },
             { id:"kpi",     label:"KPIs & Analytics" },
             { id:"guests",  label:"Guest Profiles" },
             { id:"rooms",   label:"Room Settings" },
@@ -271,11 +274,11 @@ function HotelDashboard() {
           <div style={{ fontSize:11, color:"#9CA3AF", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:700 }}>Tonight</div>
           <div style={{ display:"flex", gap:14 }}>
             <div>
-              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color:"#B45309" }}>{accepted.length}</div>
+              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color:"#B45309" }}>{todayAccepted.length}</div>
               <div style={{ fontSize:10, color:"#9CA3AF" }}>Accepted</div>
             </div>
             <div>
-              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color:"#15803D" }}>${accepted.reduce((s,b)=>s+(b.counterAmount??b.amount),0)}</div>
+              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color:"#15803D" }}>${todayRevenue}</div>
               <div style={{ fontSize:10, color:"#9CA3AF" }}>Revenue</div>
             </div>
           </div>
@@ -292,7 +295,7 @@ function HotelDashboard() {
               <div style={SL.logo}>LK</div>
               <div>
                 <div style={{ fontWeight:700, fontSize:13, color:"#1A1F2B" }}>{hotel.name}</div>
-                <div style={{ fontSize:11, color:"#9CA3AF" }}>{accepted.length} accepted · ${accepted.reduce((s,b)=>s+(b.counterAmount??b.amount),0)} tonight</div>
+                <div style={{ fontSize:11, color:"#9CA3AF" }}>{todayAccepted.length} accepted · ${todayRevenue} tonight</div>
               </div>
             </div>
             <button style={{ ...SL.ghostBtn, fontSize:12, padding:"7px 12px" }} onClick={onSignOut}>Sign Out</button>
