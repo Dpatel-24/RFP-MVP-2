@@ -162,7 +162,13 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms }) {
                         <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color:"#0F766E" }}>${fromPrice}</div>
                       </div>
                     </div>
-                    <div style={{ fontSize:13, color:"#6B7280", marginTop:3 }}>📍 {hotel.location}</div>
+                    <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotel.name + ' ' + hotel.location)}`}
+                      target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
+                      style={{ display:"inline-block", fontSize:13, color:"#6B7280", marginTop:3, textDecoration:"none", cursor:"pointer" }}
+                      onMouseEnter={e=>{ e.currentTarget.style.textDecoration="underline"; }}
+                      onMouseLeave={e=>{ e.currentTarget.style.textDecoration="none"; }}>
+                      📍 {hotel.location}
+                    </a>
                     <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8 }}>
                       <StarDisplay rating={hotel.rating} />
                       <span style={{ fontSize:12, color:"#6B7280" }}>{hotel.rating} ({hotel.reviewCount} reviews)</span>
@@ -384,7 +390,13 @@ function GuestView() {
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, marginBottom:14, flexWrap:"wrap" }}>
           <div>
             <h1 style={{ ...SL.h1, fontSize:26 }}>{selectedHotel.name}</h1>
-            <div style={{ fontSize:14, color:SL.sub, marginTop:5 }}>📍 {selectedHotel.location}</div>
+            <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedHotel.name + ' ' + selectedHotel.location)}`}
+              target="_blank" rel="noopener noreferrer"
+              style={{ display:"inline-block", fontSize:14, color:SL.sub, marginTop:5, textDecoration:"none", cursor:"pointer" }}
+              onMouseEnter={e=>{ e.currentTarget.style.textDecoration="underline"; }}
+              onMouseLeave={e=>{ e.currentTarget.style.textDecoration="none"; }}>
+              📍 {selectedHotel.location}
+            </a>
             <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8 }}>
               <StarDisplay rating={selectedHotel.rating} />
               <span style={{ fontSize:13, color:SL.sub }}>{selectedHotel.rating} ({selectedHotel.reviewCount} reviews)</span>
@@ -641,7 +653,13 @@ function GuestView() {
             <div style={{ width:84, flexShrink:0 }}><ImageOrIcon url={selectedRoom?.imageUrl} type={selectedRoom?.image} height={64} radius={10} /></div>
             <div>
               <div style={{ fontWeight:700, fontSize:15 }}>{selectedRoom?.name}</div>
-              <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>{selectedHotel?.name}</div>
+              <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((selectedHotel?.name || '') + ' ' + (selectedHotel?.location || ''))}`}
+                target="_blank" rel="noopener noreferrer"
+                style={{ display:"inline-block", fontSize:12, color:SL.sub, marginTop:2, textDecoration:"none", cursor:"pointer" }}
+                onMouseEnter={e=>{ e.currentTarget.style.textDecoration="underline"; }}
+                onMouseLeave={e=>{ e.currentTarget.style.textDecoration="none"; }}>
+                {selectedHotel?.name}
+              </a>
               <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>📅 {stayWindow(getTodayKey())}</div>
             </div>
           </div>
