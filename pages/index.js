@@ -291,6 +291,17 @@ function GuestView() {
     return () => clearInterval(iv);
   }, []);
 
+  // ── Keep the guest's stay count live (derived from accepted/handled bids) ───
+  // Mirrors getGuestStats so the counter updates the moment a bid is accepted,
+  // without re-fetching the profile.
+  useEffect(() => {
+    setCurrentGuest(g => {
+      if (!g) return g;
+      const stays = bids.filter(b => ["accepted", "handled"].includes(b.status)).length;
+      return stays === g.stays ? g : { ...g, stays };
+    });
+  }, [bids]);
+
   async function handleCancel(id) {
     if (!id) return;
     if (typeof window !== "undefined" && !window.confirm("Cancel this rate request? This can't be undone.")) return;
