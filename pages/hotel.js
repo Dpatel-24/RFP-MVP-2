@@ -102,6 +102,7 @@ function HotelDashboard() {
   const [notification, setNotification] = useState(null);
   const [expandedGuest, setExpandedGuest] = useState(null);
   const [uploadingRoom, setUploadingRoom] = useState(null);
+  const [guestStats, setGuestStats] = useState({}); // guest_id -> { rating, stays, verified } trust signals
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [showAdd, setShowAdd]           = useState(false);
   const [newRoom, setNewRoom]           = useState({ name:"", room_type:"", rack_rate:"", bid_floor:"", inventory_count:"1", amenities:"" });
@@ -159,6 +160,26 @@ function HotelDashboard() {
     }
     prevCount.current = pendings;
   }, [bids]);
+
+  // ── Fetch guest trust signals (rating + stays) per bid, cached by guest_id ──
+  // bid.guest.email carries the guest_id (set in getHotelRequests). Only fetch
+  // ids we haven't cached yet, so this never refetches the same guest.
+  useEffect(() => {
+    const ids = [...new Set(bids.map(b => b.guest?.email).filter(Boolean))];
+    const missing = ids.filter(id => !(id in guestStats));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    Promise.all(missing.map(id => api.fetchGuestProfile(id).then(p => [id, p]).catch(() => [id, null])))
+      .then(entries => {
+        if (cancelled) return;
+        setGuestStats(prev => {
+          const next = { ...prev };
+          for (const [id, p] of entries) if (p) next[id] = p;
+          return next;
+        });
+      });
+    return () => { cancelled = true; };
+  }, [bids]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function onDecide(id, status) {
     try { await api.hotelDecide(id, status); refreshBids(); if (status === "accepted") reloadRooms(); }
@@ -348,6 +369,12 @@ function HotelDashboard() {
                   const floor = room?.floor_price;
                   const aboveFloor = floor == null ? true : bid.amount >= floor;
                   const cv = counterInputs[bid.id] || "";
+                  // Guest trust signals — prefer the freshly fetched stats, fall
+                  // back to the profile embedded on the bid while they load.
+                  const gp = guestStats[bid.guest?.email] || bid.guest || {};
+                  const gRating = Number(gp.rating || 0);
+                  const gStays = gp.stays || 0;
+                  const gTrusted = gStays >= 10 && gRating >= 4.5;
                   return (
                     <div key={bid.id} style={{ ...SL.bidCard, borderColor:aboveFloor?"#86EFAC":"#FCA5A5", marginBottom:16 }}>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
@@ -365,6 +392,19 @@ function HotelDashboard() {
                           <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:30, color:"#B45309" }}>${bid.amount}</div>
                           <div style={{ fontSize:12, color:"#9CA3AF" }}>Rack: ${bid.room.rack}</div>
                         </div>
+                      </div>
+
+                      {/* Guest trust row — at the moment of decision */}
+                      <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:14, paddingBottom:14, borderBottom:"1px solid #E5E7EB" }}>
+                        <span style={{ fontSize:12, color:"#6B7280", fontWeight:600 }}>Guest</span>
+                        {gRating > 0 && <StarDisplay rating={gRating} />}
+                        {gRating > 0 && <span style={{ fontSize:13, fontWeight:700, color:"#1A1F2B" }}>{gRating.toFixed(1)}</span>}
+                        {gRating > 0 && <span style={{ color:"#D1D5DB" }}>·</span>}
+                        <span style={{ fontSize:13, color: gStays === 0 ? "#6B7280" : "#1A1F2B", fontWeight: gStays === 0 ? 400 : 600 }}>
+                          {gStays === 0 ? "New guest" : `${gStays} stay${gStays === 1 ? "" : "s"}`}
+                        </span>
+                        {gp.verified && <span style={{ fontSize:11, background:"#D1FAE5", color:"#047857", padding:"2px 7px", borderRadius:6, fontWeight:700 }}>✓ Verified</span>}
+                        {gTrusted && <span style={{ fontSize:11, background:"#DCFCE7", color:"#15803D", padding:"2px 8px", borderRadius:6, fontWeight:700 }}>Trusted Guest</span>}
                       </div>
 
                       {bid.guest && (
