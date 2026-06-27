@@ -217,6 +217,7 @@ function GuestView() {
   const [guestDate, setGuestDate]         = useState(getTodayKey());
   const [agreeTerms, setAgreeTerms]       = useState(false);
   const [now, setNow]                     = useState(Date.now());
+  const [savedHotelIds, setSavedHotelIds] = useState(new Set()); // hotel_ids the guest has saved
   const timerRef = useRef(null);
 
   const width = useWindowWidth();
@@ -247,6 +248,7 @@ function GuestView() {
       if (profile) profile.email = session.user.email;
       setCurrentGuest(profile);
       refreshBids(profile);
+      api.getSavedHotels(session.user.id).then(ids => setSavedHotelIds(new Set(ids))).catch(console.error);
       if (unsub) unsub();
       unsub = api.subscribeRequests("guest_id", session.user.id, () => refreshBids(profile));
     }
@@ -356,12 +358,34 @@ function GuestView() {
 
   async function handleSignOut() {
     await api.signOut();
-    setCurrentGuest(null); setBids([]); setScreen("listing"); setSideTab("browse");
+    setCurrentGuest(null); setBids([]); setSavedHotelIds(new Set()); setScreen("listing"); setSideTab("browse");
   }
 
   function reset() {
     setScreen("listing"); setSideTab("browse");
     setActiveBid(null); setBidAmount(""); setSelectedRoom(null); setSelectedHotel(null);
+  }
+
+  // ── Save / unsave a hotel (optimistic, reverts on failure) ─────────────────
+  async function toggleSave(hotel) {
+    if (!currentGuest) { setScreen("login"); return; }
+    const isSaved = savedHotelIds.has(hotel.id);
+    setSavedHotelIds(prev => {
+      const next = new Set(prev);
+      if (isSaved) next.delete(hotel.id); else next.add(hotel.id);
+      return next;
+    });
+    try {
+      if (isSaved) await api.unsaveHotel(currentGuest.id, hotel.id);
+      else await api.saveHotel(currentGuest.id, hotel.id);
+    } catch (e) {
+      console.error(e);
+      setSavedHotelIds(prev => { // revert
+        const next = new Set(prev);
+        if (isSaved) next.add(hotel.id); else next.delete(hotel.id);
+        return next;
+      });
+    }
   }
 
   // ── Main content area based on screen ──────────────────────────────────────
@@ -404,7 +428,11 @@ function GuestView() {
           </div>
           <div style={{ display:"flex", gap:8 }}>
             <span style={{ ...SL.ghostBtn, opacity:0.6 }}>↗ Share</span>
-            <span style={{ ...SL.ghostBtn, opacity:0.6 }}>♡ Save</span>
+            <button
+              style={{ ...SL.ghostBtn, cursor:"pointer", color: savedHotelIds.has(selectedHotel.id) ? "#B45309" : "#374151", borderColor: savedHotelIds.has(selectedHotel.id) ? "#FCD34D" : "#D1D5DB" }}
+              onClick={() => toggleSave(selectedHotel)}>
+              {savedHotelIds.has(selectedHotel.id) ? "♥ Saved" : "♡ Save"}
+            </button>
           </div>
         </div>
 
@@ -888,10 +916,44 @@ function GuestView() {
       );
     }
 
+    if (sideTab === "saved") {
+      const savedList = hotels.filter(h => savedHotelIds.has(h.id));
+      return (
+        <div style={{ ...wrap, maxWidth:760 }}>
+          <h1 style={{ ...SL.h1, marginBottom:18 }}>Saved Hotels</h1>
+          {savedList.length === 0
+            ? <div style={{ ...SL.panel, padding:"36px 24px", textAlign:"center", color:SL.sub, fontSize:14 }}>No saved hotels yet. Browse and tap ♡ to save one.</div>
+            : <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                {savedList.map(h => {
+                  const fromPrice = Math.min(...h.rooms.map(r=>r.rack));
+                  return (
+                    <div key={h.id} style={{ ...SL.card, cursor:"pointer", display:"flex", flexWrap:"wrap" }}
+                      onClick={() => { setSelectedHotel(h); setSideTab("browse"); setScreen("hotel"); }}>
+                      <div style={{ width:160, flexShrink:0 }}>
+                        <img src={h.heroImage || HERO_FALLBACK} alt="" loading="lazy" style={{ width:"100%", height:120, objectFit:"cover", display:"block" }} />
+                      </div>
+                      <div style={{ flex:1, minWidth:200, padding:"14px 16px" }}>
+                        <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16 }}>{h.name}</div>
+                        <div style={{ fontSize:13, color:SL.sub, marginTop:3 }}>📍 {h.location}</div>
+                        <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8 }}>
+                          <StarDisplay rating={h.rating} />
+                          <span style={{ fontSize:12, color:SL.sub }}>{h.rating} ({h.reviewCount} reviews)</span>
+                        </div>
+                        <div style={{ fontSize:13, color:SL.price, fontWeight:700, marginTop:8 }}>from ${fromPrice}/night</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+          }
+        </div>
+      );
+    }
+
     return null; // browse and profile are rendered in renderMain
   }
 
-  const panelTabs = ["live","history"];
+  const panelTabs = ["live","history","saved"];
   const showPanel = panelTabs.includes(sideTab);
 
   // Shared tab selection used by both the desktop sidebar and the mobile nav.
@@ -932,6 +994,7 @@ function GuestView() {
               { id:"browse",  label:"Browse Hotels" },
               { id:"live",    label:"Live Requests", count: myLive.length },
               { id:"history", label:"History",       count: myHistory.length },
+              { id:"saved",   label:"♥ Saved",       count: savedHotelIds.size },
               { id:"profile", label: currentGuest ? "My Profile" : "Sign In" },
             ].map(tab => (
               <button key={tab.id}
@@ -963,6 +1026,7 @@ function GuestView() {
             { id:"browse",  label:"Browse",  icon:"🔍" },
             { id:"live",    label:"Live",    icon:"⏱", count: myLive.length },
             { id:"history", label:"History", icon:"🗓", count: myHistory.length },
+            { id:"saved",   label:"Saved",   icon:"♥", count: savedHotelIds.size },
             { id:"profile", label: currentGuest ? "Profile" : "Sign In", icon:"👤" },
           ]}
         />
