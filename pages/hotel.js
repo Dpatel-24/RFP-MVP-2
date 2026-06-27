@@ -265,8 +265,11 @@ function HotelDashboard() {
           {session && !hotel ? (
             <div style={SL.emptyState}>
               <div style={{ fontWeight:700, marginBottom:8, color:"#1A1F2B" }}>No hotel linked to this account</div>
-              <div style={{ color:"#6B7280", fontSize:13, marginBottom:16 }}>This login isn&apos;t tied to a property yet. An admin must set <code>hotels.owner_user_id</code> to your user id.</div>
-              <button style={SL.ghostBtn} onClick={onSignOut}>Sign Out</button>
+              <div style={{ color:"#6B7280", fontSize:13, marginBottom:16 }}>This login isn&apos;t tied to a property yet. If you&apos;re a guest, browse the guest site instead; otherwise an admin must set <code>hotels.owner_user_id</code> to your user id.</div>
+              <div style={{ display:"flex", gap:10, justifyContent:"center", flexWrap:"wrap" }}>
+                <a href="/" style={{ ...SL.ghostBtn, textDecoration:"none" }}>← Browse as a guest</a>
+                <button style={SL.ghostBtn} onClick={onSignOut}>Sign Out</button>
+              </div>
             </div>
           ) : (
             <PasswordLogin

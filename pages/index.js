@@ -218,6 +218,7 @@ function GuestView() {
   const [agreeTerms, setAgreeTerms]       = useState(false);
   const [now, setNow]                     = useState(Date.now());
   const [savedHotelIds, setSavedHotelIds] = useState(new Set()); // hotel_ids the guest has saved
+  const [hotelAccount, setHotelAccount]   = useState(null); // set when the signed-in user owns a hotel
   const timerRef = useRef(null);
 
   const width = useWindowWidth();
@@ -243,7 +244,18 @@ function GuestView() {
   useEffect(() => {
     let unsub = null;
     async function boot(session) {
-      if (!session) { setCurrentGuest(null); setBids([]); return; }
+      if (!session) { setCurrentGuest(null); setBids([]); setSavedHotelIds(new Set()); setHotelAccount(null); return; }
+      // Role separation: if this account owns a hotel, it is NOT a guest. Don't
+      // create a guest profile or load guest data — show the hotel-account guard.
+      let ownedHotel = null;
+      try { ownedHotel = await api.getOwnerHotel(session.user.id); } catch (e) { console.error(e); }
+      if (ownedHotel) {
+        if (unsub) { unsub(); unsub = null; }
+        setHotelAccount(ownedHotel);
+        setCurrentGuest(null); setBids([]); setSavedHotelIds(new Set());
+        return;
+      }
+      setHotelAccount(null);
       const profile = await api.ensureGuestProfile(session.user, session.user.email?.split("@")[0]);
       if (profile) profile.email = session.user.email;
       setCurrentGuest(profile);
@@ -358,7 +370,7 @@ function GuestView() {
 
   async function handleSignOut() {
     await api.signOut();
-    setCurrentGuest(null); setBids([]); setSavedHotelIds(new Set()); setScreen("listing"); setSideTab("browse");
+    setCurrentGuest(null); setBids([]); setSavedHotelIds(new Set()); setHotelAccount(null); setScreen("listing"); setSideTab("browse");
   }
 
   function reset() {
@@ -958,6 +970,27 @@ function GuestView() {
 
   // Shared tab selection used by both the desktop sidebar and the mobile nav.
   const selectTab = (id) => { setSideTab(id); if (!panelTabs.includes(id)) setScreen(id === "browse" ? "listing" : id); };
+
+  // Role guard: a hotel-owner account is not a guest. Keep the two identities
+  // separate instead of creating a guest profile for a hotel login.
+  if (hotelAccount) {
+    return (
+      <div style={{ ...SL.page, display:"block", overflowY:"auto" }}>
+        <div style={{ maxWidth:440, margin:"0 auto", padding:"80px 24px", textAlign:"center" }}>
+          <div style={{ ...SL.logo, margin:"0 auto 18px" }}>LK</div>
+          <h1 style={{ ...SL.h1, fontSize:24, marginBottom:10 }}>You&apos;re signed in as a hotel</h1>
+          <p style={{ color:SL.sub, fontSize:14, lineHeight:1.6, margin:"0 0 22px" }}>
+            This account manages <strong style={{ color:SL.ink }}>{hotelAccount.name}</strong>. Hotels and guests use
+            separate logins — open your dashboard to review rate requests, or sign out to browse as a guest.
+          </p>
+          <a href="/hotel" style={{ ...SL.primaryBtn, textDecoration:"none", maxWidth:280, margin:"0 auto", textAlign:"center" }}>
+            Go to Hotel Dashboard →
+          </a>
+          <button style={{ ...SL.ghostBtn, marginTop:12 }} onClick={handleSignOut}>Sign out</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={SL.page}>
