@@ -32,6 +32,21 @@ function stayWindow(ymd) {
   return `${d.toLocaleDateString(undefined, opts)} → ${next.toLocaleDateString(undefined, opts)} 11:00 AM`;
 }
 
+// Responsive: track viewport width so layouts can swap to a mobile shell.
+// Starts at a desktop default (matches SSR) then syncs on mount to avoid a
+// hydration mismatch; isMobile = width < MOBILE_BREAKPOINT.
+const MOBILE_BREAKPOINT = 768;
+function useWindowWidth() {
+  const [width, setWidth] = useState(1024);
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return width;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -106,6 +121,37 @@ function Badge({ status }) {
       <span style={{ width:6, height:6, borderRadius:"50%", background:s.color, display:"inline-block" }} />
       {s.label}
     </span>
+  );
+}
+
+// Fixed bottom tab bar shown on mobile in place of the desktop sidebar.
+// tabs: [{ id, label, icon, count }]; theme via `dark` (hotel) vs light (guest).
+const BOTTOM_NAV_HEIGHT = 60;
+function MobileBottomNav({ tabs, activeId, onSelect, dark = false }) {
+  const bg = dark ? "#0A0F1E" : "#fff";
+  const border = dark ? "#1E293B" : "#E5E7EB";
+  const idle = dark ? "#64748B" : "#9CA3AF";
+  const active = dark ? "#F7F5F0" : "#B45309";
+  return (
+    <nav style={{ position:"fixed", bottom:0, left:0, right:0, height:BOTTOM_NAV_HEIGHT, background:bg,
+      borderTop:`1px solid ${border}`, display:"flex", zIndex:900, boxShadow:"0 -2px 12px rgba(0,0,0,0.06)" }}>
+      {tabs.map(tab => {
+        const on = tab.id === activeId;
+        return (
+          <button key={tab.id} onClick={() => onSelect(tab.id)}
+            style={{ flex:1, border:"none", background:"none", cursor:"pointer", display:"flex", flexDirection:"column",
+              alignItems:"center", justifyContent:"center", gap:2, padding:"6px 2px", color: on ? active : idle,
+              fontFamily:"Inter,sans-serif", fontWeight:on?700:500, position:"relative" }}>
+            <span style={{ fontSize:18, lineHeight:1 }}>{tab.icon}</span>
+            <span style={{ fontSize:10, letterSpacing:"0.01em" }}>{tab.label}</span>
+            {tab.count > 0 && (
+              <span style={{ position:"absolute", top:4, right:"50%", marginRight:-20, background:"#F59E0B", color:"#0A0F1E",
+                fontSize:9, fontWeight:700, minWidth:15, height:15, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", padding:"0 4px" }}>{tab.count}</span>
+            )}
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -431,6 +477,12 @@ function GuestView() {
   const [now, setNow]                     = useState(Date.now());
   const timerRef = useRef(null);
 
+  const width = useWindowWidth();
+  const isMobile = width < MOBILE_BREAKPOINT;
+  // Mobile content wrappers: full width, tighter 16px gutters, room for bottom nav.
+  const wrap     = isMobile ? { ...SL.wrap,     maxWidth:"100%", padding:"20px 16px 28px" } : SL.wrap;
+  const wrapWide = isMobile ? { ...SL.wrapWide, maxWidth:"100%", padding:"16px 16px 28px" } : SL.wrapWide;
+
   const myBids    = bids;
   const myLive    = myBids.filter(b => ["pending","countered"].includes(effectiveStatus(b)));
   const myHistory = myBids.filter(b => !["pending","countered"].includes(effectiveStatus(b)));
@@ -578,7 +630,7 @@ function GuestView() {
       const safety = ["Daily cleaning","Disinfection & sterilization","Fire extinguishers","Smoke detectors"];
       const reviewCats = ["Cleanliness","Communication","Value for money","Location","Comfort"];
       return (
-      <div style={SL.wrapWide}>
+      <div style={wrapWide}>
         <button style={SL.backBtn} onClick={() => setScreen("listing")}>← All Hotels</button>
 
         {/* Top titles */}
@@ -778,7 +830,7 @@ function GuestView() {
     }
 
     if (screen === "login") return (
-      <div style={{ ...SL.wrap, maxWidth:480 }}>
+      <div style={{ ...wrap, maxWidth:480 }}>
         <button style={SL.backBtn} onClick={() => setScreen("listing")}>← Back</button>
         <PasswordLogin
           light
@@ -791,7 +843,7 @@ function GuestView() {
     );
 
     if (screen === "bid") return (
-      <div style={{ ...SL.wrap, maxWidth:560 }}>
+      <div style={{ ...wrap, maxWidth:560 }}>
         <button style={SL.backBtn} onClick={() => setScreen("hotel")}>← Back</button>
         {currentGuest && <div style={{ marginBottom:14 }}><GuestProfileCard guest={currentGuest} compact light /></div>}
         <div style={{ ...SL.panel, overflow:"hidden", marginBottom:14 }}>
@@ -808,7 +860,7 @@ function GuestView() {
           <div style={{ display:"flex", alignItems:"baseline", gap:8, borderBottom:"2px solid #F59E0B", paddingBottom:12, marginBottom:18 }}>
             <span style={{ fontFamily:"Space Grotesk,sans-serif", fontSize:26, fontWeight:700, color:"#F59E0B" }}>$</span>
             <input type="number" placeholder="0" value={bidAmount} onChange={e=>setBidAmount(e.target.value)} min="1"
-              style={{ flex:1, border:"none", outline:"none", fontFamily:"Space Grotesk,sans-serif", fontSize:42, fontWeight:700, color:"#1A1F2B", width:"100%", background:"transparent" }} />
+              style={{ flex:1, border:"none", outline:"none", fontFamily:"Space Grotesk,sans-serif", fontSize:isMobile?28:42, fontWeight:700, color:"#1A1F2B", width:"100%", background:"transparent" }} />
             <span style={{ fontSize:13, color:SL.sub, whiteSpace:"nowrap" }}>/ night</span>
           </div>
           {!currentGuest && (
@@ -830,7 +882,7 @@ function GuestView() {
       const taxes = Math.round(rate * TAX_RATE);
       const total = rate + taxes;
       return (
-        <div style={{ ...SL.wrap, maxWidth:560 }}>
+        <div style={{ ...wrap, maxWidth:560 }}>
           <button style={SL.backBtn} onClick={() => setScreen("bid")}>← Edit request</button>
           <h1 style={{ ...SL.h1, fontSize:24, marginBottom:4 }}>Review &amp; confirm</h1>
           <p style={{ color:SL.sub, fontSize:14, margin:"0 0 18px" }}>Confirm your rate request. No card is charged — you pay the hotel directly if accepted.</p>
@@ -874,8 +926,8 @@ function GuestView() {
     }
 
     if (screen === "waiting") return (
-      <div style={{ ...SL.wrap, maxWidth:560, textAlign:"center", paddingTop:48 }}>
-        <div style={{ display:"flex", justifyContent:"center", marginBottom:24 }}><TimerRing seconds={timeLeft} /></div>
+      <div style={{ ...wrap, maxWidth:560, textAlign:"center", paddingTop:48 }}>
+        <div style={{ display:"flex", justifyContent:"center", marginBottom:24 }}><TimerRing seconds={timeLeft} size={isMobile?120:160} /></div>
         <h2 style={{ ...SL.h1, fontSize:22, marginBottom:10 }}>Request Sent</h2>
         <p style={{ color:SL.sub, maxWidth:320, margin:"0 auto", lineHeight:1.6 }}>
           <strong style={{ color:SL.ink }}>{activeBid?.hotel?.name}</strong> is reviewing your ${activeBid?.amount} request for {activeBid?.room?.name}.
@@ -895,7 +947,7 @@ function GuestView() {
     if (screen === "counter") {
       const bid = bids.find(b=>b.id===activeBid?.id) || activeBid;
       return (
-        <div style={{ ...SL.wrap, maxWidth:560, textAlign:"center", paddingTop:36 }}>
+        <div style={{ ...wrap, maxWidth:560, textAlign:"center", paddingTop:36 }}>
           <div style={{ fontSize:44, marginBottom:12 }}>🤝</div>
           <h2 style={{ ...SL.h1, fontSize:24, marginBottom:8 }}>Counter Offer</h2>
           <p style={{ color:SL.sub, maxWidth:320, margin:"0 auto 20px", lineHeight:1.6 }}>
@@ -922,7 +974,7 @@ function GuestView() {
       const accepted = status === "accepted" || status === "handled";
       const expired  = status === "expired";
       return (
-        <div style={{ ...SL.wrap, maxWidth:560, textAlign:"center", paddingTop:48 }}>
+        <div style={{ ...wrap, maxWidth:560, textAlign:"center", paddingTop:48 }}>
           <div style={{ width:72, height:72, borderRadius:"50%", background:"#F3F4F6", display:"flex", alignItems:"center", justifyContent:"center", fontSize:30, margin:"0 auto" }}>
             {accepted?"✓":expired?"⏱":"✕"}
           </div>
@@ -948,7 +1000,7 @@ function GuestView() {
 
     // profile tab
     if (sideTab === "profile") return (
-      <div style={{ ...SL.wrap, maxWidth:560 }}>
+      <div style={{ ...wrap, maxWidth:560 }}>
         <h1 style={{ ...SL.h1, marginBottom:18 }}>My Profile</h1>
         {currentGuest
           ? <GuestProfileForm
@@ -970,7 +1022,7 @@ function GuestView() {
   // ── Live requests panel (sidebar tab content) ──────────────────────────────
   function renderSideContent() {
     if (sideTab === "live") return (
-      <div style={{ ...SL.wrap, maxWidth:640 }}>
+      <div style={{ ...wrap, maxWidth:640 }}>
         <h1 style={{ ...SL.h1, marginBottom:18 }}>Live Requests</h1>
         {myLive.length === 0
           ? <div style={{ ...SL.panel, padding:"40px 28px", textAlign:"center", color:SL.sub, fontSize:14 }}>No active requests.<br/>Submit a bid to get started.</div>
@@ -1031,7 +1083,7 @@ function GuestView() {
     if (sideTab === "history") {
       const dayBids = myBids.filter(b => b.stayDate === guestDate);
       return (
-        <div style={{ ...SL.wrap, maxWidth:760 }}>
+        <div style={{ ...wrap, maxWidth:760 }}>
           <h1 style={{ ...SL.h1, marginBottom:18 }}>History</h1>
           <BookingCalendar light bids={myBids} selectedDate={guestDate} onSelect={setGuestDate} />
           <div style={SL.sectionLabel}>{shortDate(guestDate)} · {dayBids.length} request{dayBids.length===1?"":"s"}</div>
@@ -1075,6 +1127,9 @@ function GuestView() {
   const panelTabs = ["live","history"];
   const showPanel = panelTabs.includes(sideTab);
 
+  // Shared tab selection used by both the desktop sidebar and the mobile nav.
+  const selectTab = (id) => { setSideTab(id); if (!panelTabs.includes(id)) setScreen(id === "browse" ? "listing" : id); };
+
   return (
     <div style={SL.page}>
       {counterToast && (
@@ -1087,49 +1142,64 @@ function GuestView() {
         </div>
       )}
 
-      <div style={{ ...SL.sidebar, width:210 }}>
-        <div style={{ marginBottom:24, display:"flex", alignItems:"center", gap:10 }}>
-          <div style={SL.logo}>LK</div>
-          {currentGuest
-            ? <div>
-                <div style={{ fontWeight:700, fontSize:13, lineHeight:1.2, color:SL.ink }}>{currentGuest.name}</div>
-                <div style={{ fontSize:11, color:SL.faint, marginTop:3 }}>
-                  {currentGuest.rating > 0 ? `⭐ ${currentGuest.rating.toFixed(1)}` : "New member"} · {currentGuest.stays} stays
+      {!isMobile && (
+        <div style={{ ...SL.sidebar, width:210 }}>
+          <div style={{ marginBottom:24, display:"flex", alignItems:"center", gap:10 }}>
+            <div style={SL.logo}>LK</div>
+            {currentGuest
+              ? <div>
+                  <div style={{ fontWeight:700, fontSize:13, lineHeight:1.2, color:SL.ink }}>{currentGuest.name}</div>
+                  <div style={{ fontSize:11, color:SL.faint, marginTop:3 }}>
+                    {currentGuest.rating > 0 ? `⭐ ${currentGuest.rating.toFixed(1)}` : "New member"} · {currentGuest.stays} stays
+                  </div>
                 </div>
-              </div>
-            : <div>
-                <div style={{ fontWeight:700, fontSize:14, color:SL.ink }}>LastKey</div>
-                <div style={{ fontSize:11, color:SL.faint, marginTop:2 }}>Private rate requests</div>
-              </div>
-          }
-        </div>
+              : <div>
+                  <div style={{ fontWeight:700, fontSize:14, color:SL.ink }}>LastKey</div>
+                  <div style={{ fontSize:11, color:SL.faint, marginTop:2 }}>Private rate requests</div>
+                </div>
+            }
+          </div>
 
-        <div style={{ display:"flex", flexDirection:"column", gap:2, flex:1 }}>
-          {[
-            { id:"browse",  label:"Browse Hotels" },
-            { id:"live",    label:"Live Requests", count: myLive.length },
-            { id:"history", label:"History",       count: myHistory.length },
-            { id:"profile", label: currentGuest ? "My Profile" : "Sign In" },
-          ].map(tab => (
-            <button key={tab.id}
-              style={{ ...SL.navItem, ...(sideTab===tab.id ? SL.navActive : {}) }}
-              onClick={() => { setSideTab(tab.id); if (!panelTabs.includes(tab.id)) setScreen(tab.id === "browse" ? "listing" : tab.id); }}>
-              {tab.label}
-              {tab.count > 0 && <span style={SL.navBadge}>{tab.count}</span>}
+          <div style={{ display:"flex", flexDirection:"column", gap:2, flex:1 }}>
+            {[
+              { id:"browse",  label:"Browse Hotels" },
+              { id:"live",    label:"Live Requests", count: myLive.length },
+              { id:"history", label:"History",       count: myHistory.length },
+              { id:"profile", label: currentGuest ? "My Profile" : "Sign In" },
+            ].map(tab => (
+              <button key={tab.id}
+                style={{ ...SL.navItem, ...(sideTab===tab.id ? SL.navActive : {}) }}
+                onClick={() => selectTab(tab.id)}>
+                {tab.label}
+                {tab.count > 0 && <span style={SL.navBadge}>{tab.count}</span>}
+              </button>
+            ))}
+          </div>
+
+          {!currentGuest && (
+            <button style={{ ...SL.primaryBtn, marginTop:12, fontSize:13, padding:"11px 12px" }} onClick={()=>{ setSideTab("browse"); setScreen("login"); }}>
+              Sign In / Join
             </button>
-          ))}
+          )}
         </div>
+      )}
 
-        {!currentGuest && (
-          <button style={{ ...SL.primaryBtn, marginTop:12, fontSize:13, padding:"11px 12px" }} onClick={()=>{ setSideTab("browse"); setScreen("login"); }}>
-            Sign In / Join
-          </button>
-        )}
-      </div>
-
-      <div style={{ ...SL.content, padding: 0 }}>
+      <div style={{ ...SL.content, padding: isMobile ? `0 0 ${BOTTOM_NAV_HEIGHT}px` : 0 }}>
         {showPanel ? renderSideContent() : renderMain()}
       </div>
+
+      {isMobile && (
+        <MobileBottomNav
+          activeId={sideTab}
+          onSelect={selectTab}
+          tabs={[
+            { id:"browse",  label:"Browse",  icon:"🔍" },
+            { id:"live",    label:"Live",    icon:"⏱", count: myLive.length },
+            { id:"history", label:"History", icon:"🗓", count: myHistory.length },
+            { id:"profile", label: currentGuest ? "Profile" : "Sign In", icon:"👤" },
+          ]}
+        />
+      )}
     </div>
   );
 }
@@ -1294,6 +1364,9 @@ function HotelDashboard() {
   const [newRoom, setNewRoom]           = useState({ name:"", room_type:"", rack_rate:"", bid_floor:"", inventory_count:"1", amenities:"" });
   const prevCount = useRef(null); // null until first bids load — avoids a false toast on mount
 
+  const width = useWindowWidth();
+  const isMobile = width < MOBILE_BREAKPOINT;
+
   const refreshBids = useCallback(async (h) => {
     const hot = h || hotel;
     if (!hot) return;
@@ -1434,7 +1507,7 @@ function HotelDashboard() {
   }
 
   return (
-    <div style={SL.dashWrap}>
+    <div style={isMobile ? { ...SL.dashWrap, display:"block" } : SL.dashWrap}>
       {notification && (
         <div style={SL.toast}>
           <span style={SL.toastDot} />
@@ -1447,6 +1520,7 @@ function HotelDashboard() {
         </div>
       )}
 
+      {!isMobile && (
       <div style={SL.sidebar}>
         <div style={SL.sidebarTop}>
           <div style={SL.logo}>LK</div>
@@ -1484,8 +1558,22 @@ function HotelDashboard() {
           <button style={{ ...SL.ghostBtn, marginTop:14, fontSize:12, width:"100%", textAlign:"center" }} onClick={onSignOut}>Sign Out</button>
         </div>
       </div>
+      )}
 
-      <div style={SL.dashMain}>
+      <div style={isMobile ? { ...SL.dashMain, height:"100%", padding:`56px 16px ${BOTTOM_NAV_HEIGHT + 20}px` } : SL.dashMain}>
+
+        {isMobile && (
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <div style={SL.logo}>LK</div>
+              <div>
+                <div style={{ fontWeight:700, fontSize:13, color:"#1A1F2B" }}>{hotel.name}</div>
+                <div style={{ fontSize:11, color:"#9CA3AF" }}>{accepted.length} accepted · ${accepted.reduce((s,b)=>s+(b.counterAmount??b.amount),0)} tonight</div>
+              </div>
+            </div>
+            <button style={{ ...SL.ghostBtn, fontSize:12, padding:"7px 12px" }} onClick={onSignOut}>Sign Out</button>
+          </div>
+        )}
 
         {activeTab === "live" && (
           <div>
@@ -1736,6 +1824,20 @@ function HotelDashboard() {
           </div>
         )}
       </div>
+
+      {isMobile && (
+        <MobileBottomNav
+          activeId={activeTab}
+          onSelect={setActiveTab}
+          tabs={[
+            { id:"live",    label:"Requests", icon:"⏱", count: liveBids.length },
+            { id:"history", label:"Calendar", icon:"🗓" },
+            { id:"kpi",     label:"KPIs",     icon:"📊" },
+            { id:"guests",  label:"Guests",   icon:"👤" },
+            { id:"rooms",   label:"Rooms",    icon:"🛏" },
+          ]}
+        />
+      )}
     </div>
   );
 }
