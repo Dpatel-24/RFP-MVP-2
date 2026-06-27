@@ -101,6 +101,7 @@ function HotelDashboard() {
   const [counterInputs, setCounterInputs] = useState({});
   const [notification, setNotification] = useState(null);
   const [expandedGuest, setExpandedGuest] = useState(null);
+  const [uploadingRoom, setUploadingRoom] = useState(null);
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [showAdd, setShowAdd]           = useState(false);
   const [newRoom, setNewRoom]           = useState({ name:"", room_type:"", rack_rate:"", bid_floor:"", inventory_count:"1", amenities:"" });
@@ -192,6 +193,15 @@ function HotelDashboard() {
   async function onRemoveRoom(roomId) {
     if (!window.confirm("Remove this room type? It will be hidden from guests. Past bookings are kept.")) return;
     try { await api.removeRoom(roomId); reloadRooms(); } catch (e) { console.error(e); alert("Could not remove room."); }
+  }
+  async function onUploadPhoto(roomId, file) {
+    if (!file) return;
+    setUploadingRoom(roomId);
+    try {
+      const url = await api.uploadRoomImage(roomId, hotel.id, file);
+      setRooms(prev => prev.map(r => r.id===roomId ? { ...r, imageUrl:url } : r));
+    } catch (e) { console.error(e); alert("Could not upload photo."); }
+    finally { setUploadingRoom(null); }
   }
   async function onAddRoom() {
     const rack = parseFloat(newRoom.rack_rate);
@@ -563,6 +573,21 @@ function HotelDashboard() {
                     <button style={SL.settingSet} onClick={()=>onSetFloor(room.id)}>Set</button>
                   </div>
                   <div style={{ fontSize:11, color:"#15803D", marginTop:6, fontWeight:600 }}>Active: ${room.floor_price ?? "—"}</div>
+                </div>
+
+                {/* Photo */}
+                <div style={{ minWidth:140 }}>
+                  <div style={SL.settingLabel}>Photo</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    {room.imageUrl && (
+                      <img src={room.imageUrl} alt="" style={{ width:48, height:48, objectFit:"cover", borderRadius:8, flexShrink:0, border:"1px solid #E5E7EB" }} />
+                    )}
+                    <label style={{ ...SL.ghostBtn, fontSize:12, padding:"7px 12px", cursor: uploadingRoom===room.id ? "default" : "pointer", opacity: uploadingRoom===room.id ? 0.6 : 1, whiteSpace:"nowrap" }}>
+                      {uploadingRoom===room.id ? "Uploading…" : room.imageUrl ? "Replace Photo" : "Upload Photo"}
+                      <input type="file" accept="image/*" disabled={uploadingRoom===room.id} style={{ display:"none" }}
+                        onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; onUploadPhoto(room.id, f); }} />
+                    </label>
+                  </div>
                 </div>
               </div>
             ))}
