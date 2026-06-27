@@ -7,6 +7,7 @@ import {
   TimerRing, ImageOrIcon, Badge, StarDisplay, GuestProfileCard, PasswordLogin,
   BookingCalendar, MobileBottomNav, S, SL,
 } from "../lib/components";
+import { GoogleReviews } from "../lib/GoogleReviews"; // [GOOGLE-REVIEWS TEST]
 
 function GuestProfileForm({ guest, onSaved, onSignOut }) {
   const [first, setFirst] = useState(guest.firstName || "");
@@ -525,6 +526,8 @@ function GuestView() {
                 <div style={{ borderTop:`1px solid ${SL.line}`, paddingTop:16, textAlign:"center", color:SL.sub, fontSize:14 }}>
                   No guest reviews yet. Reviews appear here after completed stays.
                 </div>
+                {/* [GOOGLE-REVIEWS TEST] read-only Google reviews; renders null when none */}
+                <GoogleReviews placeId={selectedHotel.googlePlaceId} />
               </div>
             </div>
           </div>
