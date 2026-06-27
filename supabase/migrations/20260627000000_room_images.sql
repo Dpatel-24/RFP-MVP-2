@@ -23,14 +23,12 @@ on conflict (id) do update set public = true;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. Storage RLS on storage.objects (enabled by default in Supabase).
---    Public can read; only a hotel's owner can write under that hotel's folder.
+--    Only a hotel's owner can write under that hotel's folder.
+--    No SELECT policy: this is a PUBLIC bucket, so object URLs are served via
+--    /storage/v1/object/public/... without RLS. Adding a broad SELECT policy
+--    would let anyone LIST every file (advisor lint
+--    public_bucket_allows_listing), so we deliberately omit it.
 -- ─────────────────────────────────────────────────────────────────────────────
-
--- Anyone can view room photos.
-drop policy if exists "room-images public read" on storage.objects;
-create policy "room-images public read"
-  on storage.objects for select
-  using ( bucket_id = 'room-images' );
 
 -- Owner can upload into a path under a hotel they own.
 drop policy if exists "room-images owner insert" on storage.objects;
