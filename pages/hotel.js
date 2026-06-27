@@ -35,6 +35,21 @@ function KPIPanel({ bids, totalRooms = 0, dateLabel }) {
     { label:"Rooms Still Empty",  value:Math.max(0,totalRooms-accepted.length), sub:`out of ${totalRooms} available tonight`, color:totalRooms>0&&accepted.length>=totalRooms?"#15803D":"#DC2626" },
   ];
 
+  // Consolidate the day's bids by room type: count, avg bid, acceptance rate.
+  // Missing/null room_type falls under "Other". Sorted by bid count desc.
+  const byRoomType = Object.values(
+    bids.reduce((acc, b) => {
+      const key = b.room?.type || "Other";
+      acc[key] = acc[key] || { type: key, count: 0, bidSum: 0, accepted: 0 };
+      acc[key].count += 1;
+      acc[key].bidSum += b.amount;
+      if (["accepted","handled"].includes(b.status)) acc[key].accepted += 1;
+      return acc;
+    }, {})
+  )
+    .map(g => ({ type: g.type, count: g.count, avgBid: Math.round(g.bidSum / g.count), acceptRate: Math.round((g.accepted / g.count) * 100) }))
+    .sort((a, b) => b.count - a.count);
+
   return (
     <div>
       {total === 0 && (
@@ -53,16 +68,19 @@ function KPIPanel({ bids, totalRooms = 0, dateLabel }) {
       </div>
       {total > 0 && (
         <div style={{ ...SL.panel, padding:"18px 20px" }}>
-          <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:14, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:600 }}>Bid Distribution</div>
-          {bids.slice().reverse().map(b => (
-            <div key={b.id} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:8 }}>
-              <div style={{ width:72, fontSize:12, color:"#9CA3AF", flexShrink:0 }}>{b.room.name.split(" ")[0]}</div>
-              <div style={{ flex:1, background:"#E5E7EB", borderRadius:4, height:8, overflow:"hidden" }}>
-                <div style={{ width:`${Math.min(100,(amt(b)/b.room.rack)*100)}%`, height:"100%", borderRadius:4,
-                  background:["accepted","handled"].includes(b.status)?"#16A34A":b.status==="countered"?"#7C3AED":b.status==="pending"?"#F59E0B":"#EF4444" }} />
-              </div>
-              <div style={{ width:36, fontSize:12, fontWeight:700, color:"#1A1F2B", textAlign:"right" }}>${amt(b)}</div>
-              <div style={{ width:60, flexShrink:0 }}><Badge status={b.status} /></div>
+          <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:14, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:600 }}>Bids by Room Type</div>
+          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr", gap:12, fontSize:11, color:"#9CA3AF", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.04em", paddingBottom:8, borderBottom:"1px solid #E5E7EB" }}>
+            <span>Room Type</span>
+            <span style={{ textAlign:"right" }}>Bids</span>
+            <span style={{ textAlign:"right" }}>Avg Bid</span>
+            <span style={{ textAlign:"right" }}>Accepted</span>
+          </div>
+          {byRoomType.map(g => (
+            <div key={g.type} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr", gap:12, alignItems:"center", padding:"10px 0", borderBottom:"1px solid #F3F4F6" }}>
+              <span style={{ fontSize:13, fontWeight:600, color:"#1A1F2B" }}>{g.type}</span>
+              <span style={{ fontSize:13, color:"#1A1F2B", textAlign:"right", fontFamily:"Space Grotesk,sans-serif", fontWeight:700 }}>{g.count}</span>
+              <span style={{ fontSize:13, color:"#1A1F2B", textAlign:"right", fontFamily:"Space Grotesk,sans-serif", fontWeight:700 }}>${g.avgBid}</span>
+              <span style={{ fontSize:13, color:"#15803D", textAlign:"right", fontFamily:"Space Grotesk,sans-serif", fontWeight:700 }}>{g.acceptRate}%</span>
             </div>
           ))}
         </div>
