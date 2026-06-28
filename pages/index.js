@@ -220,6 +220,7 @@ function GuestView() {
   const [savedHotelIds, setSavedHotelIds] = useState(new Set()); // hotel_ids the guest has saved
   const [hotelAccount, setHotelAccount]   = useState(null); // set when the signed-in user owns a hotel
   const timerRef = useRef(null);
+  const bootedUid = useRef(undefined); // last user id we booted for — dedupes token-refresh/focus re-fires
 
   const width = useWindowWidth();
   const isMobile = width < MOBILE_BREAKPOINT;
@@ -244,6 +245,12 @@ function GuestView() {
   useEffect(() => {
     let unsub = null;
     async function boot(session) {
+      const uid = session?.user?.id || null;
+      // Ignore repeat auth events for the same user (TOKEN_REFRESHED, tab focus,
+      // re-fired SIGNED_IN) — re-booting on those re-fetches the profile and
+      // flickers the account UI. Only act when the signed-in user actually changes.
+      if (uid === bootedUid.current) return;
+      bootedUid.current = uid;
       if (!session) { setCurrentGuest(null); setBids([]); setSavedHotelIds(new Set()); setHotelAccount(null); return; }
       // Role separation: if this account owns a hotel, it is NOT a guest. Don't
       // create a guest profile or load guest data — show the hotel-account guard.
@@ -267,7 +274,7 @@ function GuestView() {
     api.getSession().then(boot);
     const { data: sub } = api.onAuthChange(boot);
     return () => { if (unsub) unsub(); sub?.subscription?.unsubscribe(); };
-  }, [refreshBids]);
+  }, []); // run once on mount; boot re-fetches per user via the dedupe guard above // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Watch for status changes on the active bid ─────────────────────────────
   useEffect(() => {

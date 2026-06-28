@@ -107,6 +107,7 @@ function HotelDashboard() {
   const [showAdd, setShowAdd]           = useState(false);
   const [newRoom, setNewRoom]           = useState({ name:"", room_type:"", rack_rate:"", bid_floor:"", inventory_count:"1", amenities:"" });
   const prevCount = useRef(null); // null until first bids load — avoids a false toast on mount
+  const bootedUid = useRef(undefined); // last user id booted — dedupes token-refresh/focus re-fires
 
   const width = useWindowWidth();
   const isMobile = width < MOBILE_BREAKPOINT;
@@ -125,6 +126,11 @@ function HotelDashboard() {
   useEffect(() => {
     let unsub = null;
     async function boot(s) {
+      const uid = s?.user?.id || null;
+      // Ignore repeat auth events for the same user (token refresh / tab focus) so
+      // the dashboard doesn't re-fetch and flicker.
+      if (uid === bootedUid.current) return;
+      bootedUid.current = uid;
       setSession(s || null);
       if (!s) { setHotel(null); setRooms([]); setBids([]); return; }
       try {
@@ -142,7 +148,7 @@ function HotelDashboard() {
     api.getSession().then(boot);
     const { data: sub } = api.onAuthChange(boot);
     return () => { if (unsub) unsub(); sub?.subscription?.unsubscribe(); };
-  }, [refreshBids, reloadRooms]);
+  }, []); // run once on mount; boot dedupes per user // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── 1s ticker to recompute live timers from expires_at ─────────────────────
   useEffect(() => {
