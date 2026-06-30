@@ -94,18 +94,20 @@ function GuestProfileForm({ guest, onSaved, onSignOut }) {
 const HERO_FALLBACK = "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1600&q=80";
 const PROPERTY_TABS = ["Rooms", "Flats", "Hostels", "Villas"];
 
-// Unique city/location strings across the loaded hotels — drives the typeahead.
+// Unique cities across the loaded hotels — drives the typeahead. Cities only
+// (no street addresses) so suggestions stay to places, not specific properties.
 function locationOptions(hotelsWithRooms) {
-  return [...new Set(hotelsWithRooms.flatMap(h => [h.city, h.location].filter(Boolean)))];
+  return [...new Set(hotelsWithRooms.map(h => h.city).filter(Boolean))];
 }
 
-// Location input with a live typeahead dropdown. `options` are filtered as the
-// user types; picking one (or pressing Enter) calls onSubmit with that value.
-// Used by both the hero search bar and the search-results refine bar.
-function LocationField({ value, setValue, options, onSubmit, style }) {
+// Location input with a live typeahead dropdown. Suggestions appear only once
+// the user has typed something (nothing shows for an empty field). Picking a
+// suggestion just fills the input — the search itself runs when the search
+// button is clicked. Used by the hero search bar and the results refine bar.
+function LocationField({ value, setValue, options, style }) {
   const [open, setOpen] = useState(false);
   const q = value.trim().toLowerCase();
-  const matches = (q ? options.filter(o => o.toLowerCase().includes(q)) : options).slice(0, 6);
+  const matches = q ? options.filter(o => o.toLowerCase().includes(q)).slice(0, 6) : [];
   return (
     <div style={{ position:"relative", textAlign:"left", ...style }}>
       <div style={SL.searchLabel}>Location</div>
@@ -114,7 +116,6 @@ function LocationField({ value, setValue, options, onSubmit, style }) {
         onChange={e => { setValue(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 120)}
-        onKeyDown={e => { if (e.key === "Enter") { setOpen(false); onSubmit(value); } }}
         placeholder="Which city do you prefer?"
         style={SL.searchInput}
       />
@@ -122,11 +123,11 @@ function LocationField({ value, setValue, options, onSubmit, style }) {
         <div style={SL.typeahead}>
           {matches.map(o => (
             <button key={o} type="button"
-              onMouseDown={e => { e.preventDefault(); setValue(o); setOpen(false); onSubmit(o); }}
+              onMouseDown={e => { e.preventDefault(); setValue(o); setOpen(false); }}
               style={SL.typeaheadItem}
               onMouseEnter={e => { e.currentTarget.style.background = "#F9FAFB"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "none"; }}>
-              <span style={{ fontSize:13 }}>📍</span>{o}
+              {o}
             </button>
           ))}
         </div>
@@ -180,7 +181,7 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms, locationCopy, onSear
 
           {/* Search bar */}
           <div style={SL.searchBar}>
-            <LocationField value={query} setValue={setQuery} options={allLocations} onSubmit={onSearch} style={{ flex:2, padding:"0 18px" }} />
+            <LocationField value={query} setValue={setQuery} options={allLocations} style={{ flex:2, padding:"0 18px" }} />
             <div style={SL.searchDivider} />
             <div style={{ flex:1.4, textAlign:"left", padding:"0 18px" }}>
               <div style={SL.searchLabel}>Check In · Check Out</div>
@@ -298,7 +299,7 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms, locationCopy, onSear
                       style={{ display:"inline-block", fontSize:13, color:"#6B7280", marginTop:3, textDecoration:"none", cursor:"pointer" }}
                       onMouseEnter={e=>{ e.currentTarget.style.textDecoration="underline"; }}
                       onMouseLeave={e=>{ e.currentTarget.style.textDecoration="none"; }}>
-                      📍 {hotel.location}
+                      {hotel.city || hotel.location}
                     </a>
                     <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8 }}>
                       <StarDisplay rating={hotel.rating} />
@@ -334,7 +335,7 @@ function SearchResultsView({ hotelsWithRooms, searchLocation, onSelectHotel, onB
 
         {/* Refine search */}
         <div style={{ ...SL.searchBar, maxWidth:"100%", boxShadow:"0 4px 18px rgba(0,0,0,0.10)", marginBottom:24 }}>
-          <LocationField value={query} setValue={setQuery} options={allLocations} onSubmit={onSearch} style={{ flex:1, padding:"0 18px" }} />
+          <LocationField value={query} setValue={setQuery} options={allLocations} style={{ flex:1, padding:"0 18px" }} />
           <button onClick={() => onSearch(query)} style={SL.searchBtn} aria-label="Search">🔍</button>
         </div>
 
@@ -375,7 +376,7 @@ function SearchResultsView({ hotelsWithRooms, searchLocation, onSelectHotel, onB
                       style={{ display:"inline-block", fontSize:13, color:"#6B7280", marginTop:4, textDecoration:"none", cursor:"pointer" }}
                       onMouseEnter={e=>{ e.currentTarget.style.textDecoration="underline"; }}
                       onMouseLeave={e=>{ e.currentTarget.style.textDecoration="none"; }}>
-                      📍 {hotel.location}
+                      {hotel.city || hotel.location}
                     </a>
                     <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8 }}>
                       <StarDisplay rating={hotel.rating} />
@@ -1263,9 +1264,41 @@ function GuestView() {
 
     if (sideTab === "history") {
       const dayBids = myBids.filter(b => b.stayDate === guestDate);
+      // Savings KPI — across confirmed stays, what the guest paid vs the rack rate.
+      const stayBids  = myBids.filter(b => ["accepted","handled"].includes(b.status));
+      const totalPaid = stayBids.reduce((s,b) => s + (b.counterAmount ?? b.amount), 0);
+      const totalRack = stayBids.reduce((s,b) => s + (b.room?.rack ?? (b.counterAmount ?? b.amount)), 0);
+      const totalSaved = Math.max(0, totalRack - totalPaid);
+      const savedPct   = totalRack > 0 ? Math.round((totalSaved / totalRack) * 100) : 0;
       return (
         <div style={{ ...wrap, maxWidth:760 }}>
           <h1 style={{ ...SL.h1, marginBottom:18 }}>History</h1>
+
+          {/* Savings KPI */}
+          <div style={{ ...SL.panel, border:"none", background:"linear-gradient(120deg,#0F766E 0%,#115E59 100%)", padding:"18px 20px", marginBottom:18, display:"flex", flexWrap:"wrap", gap:18, alignItems:"center", justifyContent:"space-between" }}>
+            <div>
+              <div style={{ fontSize:11, color:"rgba(255,255,255,0.8)", textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700 }}>Total saved vs rack rate</div>
+              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:34, color:"#fff", lineHeight:1.1, marginTop:4 }}>${totalSaved}</div>
+              <div style={{ fontSize:13, color:"rgba(255,255,255,0.85)", marginTop:4 }}>
+                {stayBids.length === 0
+                  ? "No confirmed stays yet — your savings will show here."
+                  : `Across ${stayBids.length} stay${stayBids.length===1?"":"s"}${savedPct>0?` · ${savedPct}% below rack on average`:""}`}
+              </div>
+            </div>
+            {stayBids.length > 0 && (
+              <div style={{ display:"flex", gap:24, flexWrap:"wrap" }}>
+                <div style={{ textAlign:"center" }}>
+                  <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:22, color:"#fff" }}>${totalPaid}</div>
+                  <div style={{ fontSize:12, color:"rgba(255,255,255,0.8)", marginTop:2 }}>You paid</div>
+                </div>
+                <div style={{ textAlign:"center" }}>
+                  <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:22, color:"rgba(255,255,255,0.75)", textDecoration:"line-through" }}>${totalRack}</div>
+                  <div style={{ fontSize:12, color:"rgba(255,255,255,0.8)", marginTop:2 }}>Rack total</div>
+                </div>
+              </div>
+            )}
+          </div>
+
           <BookingCalendar light bids={myBids} selectedDate={guestDate} onSelect={setGuestDate} />
           <div style={SL.sectionLabel}>{shortDate(guestDate)} · {dayBids.length} request{dayBids.length===1?"":"s"}</div>
           {dayBids.length === 0
