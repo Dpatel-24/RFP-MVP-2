@@ -1,4 +1,4 @@
-// ── [GEOLOCATION — STUBBED, GEOLOCATION_ENABLED=false in pages/index.js] ─────
+// ── [GEOLOCATION — toggled via GEOLOCATION_ENABLED in pages/index.js] ────────
 // Server-side proxy to an IP geolocation provider (ipwho.is). Keeps lookup
 // server-side so we control the IP used (the visitor's, not the browser's).
 // ipwho.is is free and keyless — no API key needed, nothing to put in Vercel

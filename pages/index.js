@@ -5,22 +5,26 @@ import { TIMER_SECONDS, COUNTER_TIMER, TAX_RATE, effectiveStatus, secondsLeft, g
 import {
   shortDate, stayWindow, useWindowWidth, MOBILE_BREAKPOINT,
   TimerRing, ImageOrIcon, Badge, StarDisplay, GuestProfileCard, PasswordLogin,
-  BookingCalendar, S, SL,
+  BookingCalendar, SL,
 } from "../lib/components";
 import { GoogleReviews } from "../lib/GoogleReviews"; // [GOOGLE-REVIEWS TEST]
 
 // ── Geolocation ──────────────────────────────────────────────────────────────
 // Active: homepage calls /api/geolocate and shows the visitor's detected
-// city/region. Falls back to the pilot-cities copy (all hotels shown) on no
-// match or any failure — see pilotCitiesCopy() and the effect below.
+// city/region. Hotel inventory only filters to that city on an exact match;
+// otherwise all pilot hotels stay visible (no empty state) — but the detected
+// city is still surfaced in the copy so it's visibly working even when there's
+// no pilot inventory there yet. See the effect in GuestView.
 const GEOLOCATION_ENABLED = true;
 const PILOT_CITY_COPY = "Now live in Slidell, LA";
 
-// Fallback copy when geolocation finds no match for the visitor's city —
-// lists whatever pilot cities the loaded hotels actually have.
-function pilotCitiesCopy(hotels) {
+// Fallback copy when geolocation finds no hotel match for the visitor's city —
+// lists whatever pilot cities the loaded hotels actually have, and names the
+// detected city/region if we have one so the IP lookup is visibly working.
+function pilotCitiesCopy(hotels, detected) {
   const cities = [...new Set(hotels.map(h => h.city).filter(Boolean))];
-  return cities.length ? `Now live in: ${cities.join(", ")}` : PILOT_CITY_COPY;
+  const base = cities.length ? `Now live in: ${cities.join(", ")}` : PILOT_CITY_COPY;
+  return detected ? `${base} (you're browsing from ${detected})` : base;
 }
 
 function GuestProfileForm({ guest, onSaved, onSignOut }) {
@@ -197,22 +201,6 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms, locationCopy }) {
           </div>
         )}
       </div>
-
-      {/* Footer */}
-      <footer style={{ background:"#0F172A", color:"#94A3B8", padding:"32px 24px" }}>
-        <div style={{ maxWidth:1080, margin:"0 auto", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:16 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-            <div style={S.logo}>LK</div>
-            <div>
-              <div style={{ color:"#F7F5F0", fontWeight:700, fontSize:14 }}>LastKey</div>
-              <div style={{ fontSize:12 }}>Private rate requests · tonight only</div>
-            </div>
-          </div>
-          <div style={{ display:"flex", gap:22, fontSize:13 }}>
-            <span>How it works</span><span>Support</span><span>Privacy</span><span>Terms</span>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
@@ -310,9 +298,18 @@ function GuestFooter({ isMobile }) {
   return (
     <footer style={SL.footerBar}>
       <div style={{ ...SL.footerInner, flexDirection: isMobile ? "column" : "row" }}>
-        <a href="/privacy" style={SL.footerLink}>Privacy Policy</a>
-        <a href="/terms" style={SL.footerLink}>Terms of Service</a>
-        <a href="/hotel" style={SL.footerLink}>Hotel Partner Login</a>
+        <div style={SL.footerBrand}>
+          <div style={SL.logo}>LK</div>
+          <div>
+            <div style={{ fontWeight:700, fontSize:13, color:SL.ink }}>LastKey</div>
+            <div style={{ fontSize:11, color:SL.faint, marginTop:1 }}>Private rate requests · tonight only</div>
+          </div>
+        </div>
+        <div style={{ ...SL.footerLinks, flexDirection: isMobile ? "column" : "row" }}>
+          <a href="/privacy" style={SL.footerLink}>Privacy Policy</a>
+          <a href="/terms" style={SL.footerLink}>Terms of Service</a>
+          <a href="/hotel" style={SL.footerLink}>Hotel Partner Login</a>
+        </div>
       </div>
     </footer>
   );
@@ -363,22 +360,26 @@ function GuestView() {
 
   // ── Geolocation ──────────────────────────────────────────────────────────
   // When enabled: look up the visitor's city server-side via /api/geolocate,
-  // then try to match it against loaded hotels. No match (the common pilot
-  // case) or any failure falls back silently to the all-hotels pilot copy —
-  // never an error shown to the guest.
+  // then try to match it against loaded hotels. The detected city is always
+  // surfaced in the copy (even on no match, via pilotCitiesCopy's second arg)
+  // so the lookup is visibly doing something instead of looking identical to
+  // the static pilot copy. Any failure falls back silently — never an error
+  // shown to the guest.
   useEffect(() => {
     if (!GEOLOCATION_ENABLED || hotels.length === 0) return;
     let cancelled = false;
     fetch("/api/geolocate")
       .then(r => r.json())
-      .then(({ city }) => {
+      .then(({ city, region }) => {
         if (cancelled) return;
-        const match = city ? hotels.filter(h => (h.city || "").toLowerCase() === city.toLowerCase()) : [];
+        if (!city) { setLocationCopy(pilotCitiesCopy(hotels)); return; }
+        const detected = region ? `${city}, ${region}` : city;
+        const match = hotels.filter(h => (h.city || "").toLowerCase() === city.toLowerCase());
         if (match.length > 0) {
           setGeoHotels(match);
-          setLocationCopy(`Now live in: ${city}`);
+          setLocationCopy(`Now live in: ${detected}`);
         } else {
-          setLocationCopy(pilotCitiesCopy(hotels));
+          setLocationCopy(pilotCitiesCopy(hotels, detected));
         }
       })
       .catch(() => { if (!cancelled) setLocationCopy(pilotCitiesCopy(hotels)); });
