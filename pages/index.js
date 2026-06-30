@@ -103,6 +103,12 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms, locationCopy }) {
         [h.name, h.city, h.location].filter(Boolean).some(v => v.toLowerCase().includes(q)))
     : hotelsWithRooms;
 
+  // Social-proof aggregates — real data from the loaded hotels (no fabrication).
+  const hotelCount   = hotelsWithRooms.length;
+  const ratedHotels  = hotelsWithRooms.filter(h => h.rating > 0);
+  const avgRating    = ratedHotels.length ? ratedHotels.reduce((s,h)=>s+h.rating,0)/ratedHotels.length : 0;
+  const totalReviews = hotelsWithRooms.reduce((s,h)=>s+(h.reviewCount||0),0);
+
   return (
     <div style={{ background:"#F4F5F7", color:"#1A1F2B", fontFamily:"Inter,sans-serif", minHeight:"100vh" }}>
       {/* Hero */}
@@ -151,10 +157,80 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms, locationCopy }) {
         </div>
       </div>
 
+      {/* ── Why LastKey (value props) ───────────────────────────────── */}
+      <section style={SL.mktSection}>
+        <span style={SL.mktEyebrow}>Why LastKey</span>
+        <h2 style={SL.mktTitle}>A smarter way to book tonight</h2>
+        <p style={SL.mktSub}>No fixed prices, no auctions you can&apos;t see. Name what you&apos;d pay and let the hotel answer — privately, in minutes.</p>
+        <div style={SL.valueGrid}>
+          {[
+            { icon:"🏷️", bg:"#FEF3E2", title:"Name your rate",   body:"Tell the hotel what you'd pay tonight. You set the number — not a fixed nightly price." },
+            { icon:"⚡",  bg:"#ECFDF5", title:"10-minute answers", body:"Hotels accept, decline, or counter your offer — usually within ten minutes." },
+            { icon:"🌙",  bg:"#F5F3FF", title:"Tonight only",      body:"Real unsold rooms released at the last minute, at rates you won't find publicly." },
+            { icon:"🔒",  bg:"#EFF6FF", title:"Private by design", body:"Hotels only ever see your star rating — never your name, email, or phone." },
+          ].map(v => (
+            <div key={v.title} style={{ ...SL.valueCard, background:v.bg }}>
+              <div style={SL.valueIcon}>{v.icon}</div>
+              <div style={SL.valueCardTitle}>{v.title}</div>
+              <div style={SL.valueCardBody}>{v.body}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── How it works ────────────────────────────────────────────── */}
+      <section style={SL.mktSection}>
+        <span style={SL.mktEyebrow}>How it works</span>
+        <h2 style={SL.mktTitle}>Three steps to your room</h2>
+        <p style={SL.mktSub}>From offer to check-in, the whole thing takes about ten minutes.</p>
+        <div style={SL.stepGrid}>
+          {[
+            { n:"1", title:"Name your rate",    body:"Pick a room and offer what you'd pay for tonight's stay." },
+            { n:"2", title:"Get a fast answer", body:"The hotel accepts, declines, or counters — usually in about 10 minutes." },
+            { n:"3", title:"Show your code",    body:"Give the confirmation code at check-in and pay the hotel directly. No card charged here." },
+          ].map(s => (
+            <div key={s.n} style={SL.stepCard}>
+              <div style={SL.stepNum}>{s.n}</div>
+              <div style={SL.valueCardTitle}>{s.title}</div>
+              <div style={{ ...SL.valueCardBody, marginTop:6 }}>{s.body}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Social proof / trust band ───────────────────────────────── */}
+      <section style={SL.mktSection}>
+        <div style={SL.trustBand}>
+          <div style={{ maxWidth:340 }}>
+            <h2 style={{ ...SL.mktTitle, color:"#fff", margin:0 }}>Trusted by tonight&apos;s travelers</h2>
+            <p style={{ fontSize:14, color:"rgba(255,255,255,0.85)", margin:"10px 0 0", lineHeight:1.6 }}>
+              Real hotels, real ratings. Every stay is reviewed, so the next guest knows what to expect.
+            </p>
+          </div>
+          <div style={{ display:"flex", gap:28, flexWrap:"wrap", justifyContent:"center" }}>
+            <div style={SL.trustStat}>
+              <div style={SL.trustStatNum}>{hotelCount}</div>
+              <div style={SL.trustStatLbl}>Partner hotel{hotelCount===1?"":"s"}</div>
+            </div>
+            <div style={SL.trustStat}>
+              <div style={SL.trustStatNum}>{avgRating > 0 ? avgRating.toFixed(1) : "New"}</div>
+              <div style={SL.trustStatLbl}>Average rating</div>
+            </div>
+            <div style={SL.trustStat}>
+              <div style={SL.trustStatNum}>{totalReviews}</div>
+              <div style={SL.trustStatLbl}>Guest review{totalReviews===1?"":"s"}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Listing grid */}
-      <div style={{ maxWidth:1080, margin:"0 auto", padding:"8px 24px 56px" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:18 }}>
-          <h2 style={{ fontFamily:"Space Grotesk,sans-serif", fontSize:22, fontWeight:700, margin:0 }}>Available tonight</h2>
+      <div style={{ maxWidth:1080, margin:"0 auto", padding:"48px 24px 56px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:18, gap:12, flexWrap:"wrap" }}>
+          <div>
+            <span style={SL.mktEyebrow}>Available now</span>
+            <h2 style={{ ...SL.mktTitle, fontSize:26, margin:0 }}>Rooms open tonight</h2>
+          </div>
           <span style={{ fontSize:13, color:"#6B7280" }}>{filtered.length} hotel{filtered.length===1?"":"s"} · New Orleans Area</span>
         </div>
 
