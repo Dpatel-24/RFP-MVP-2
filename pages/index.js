@@ -234,7 +234,7 @@ function GuestHeader({ currentGuest, sideTab, selectTab, setScreen, handleSignOu
                 ))}
                 <div style={{ position:"relative" }}>
                   <button style={SL.headerAccountBtn} onClick={() => setAcctOpen(o=>!o)}>
-                    👤 {currentGuest.name || "Account"}
+                    {currentGuest.name || "Account"}
                   </button>
                   {acctOpen && (
                     <div style={SL.headerDropdown} onMouseLeave={() => setAcctOpen(false)}>
@@ -284,6 +284,20 @@ function GuestHeader({ currentGuest, sideTab, selectTab, setScreen, handleSignOu
         </div>
       )}
     </header>
+  );
+}
+
+// Persistent footer for guest-facing screens (not /hotel). Stacks on mobile
+// using the same MOBILE_BREAKPOINT as the header.
+function GuestFooter({ isMobile }) {
+  return (
+    <footer style={SL.footerBar}>
+      <div style={{ ...SL.footerInner, flexDirection: isMobile ? "column" : "row" }}>
+        <a href="/privacy" style={SL.footerLink}>Privacy Policy</a>
+        <a href="/terms" style={SL.footerLink}>Terms of Service</a>
+        <a href="/hotel" style={SL.footerLink}>Hotel Partner Login</a>
+      </div>
+    </footer>
   );
 }
 
@@ -1082,6 +1096,7 @@ function GuestView() {
           </a>
           <button style={{ ...SL.ghostBtn, marginTop:12 }} onClick={handleSignOut}>Sign out</button>
         </div>
+        <GuestFooter isMobile={isMobile} />
       </div>
     );
   }
@@ -1112,6 +1127,8 @@ function GuestView() {
       <div style={SL.content}>
         {showPanel ? renderSideContent() : renderMain()}
       </div>
+
+      <GuestFooter isMobile={isMobile} />
     </div>
   );
 }
