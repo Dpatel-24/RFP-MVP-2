@@ -888,6 +888,7 @@ function GuestView() {
       const status = bid ? effectiveStatus(bid) : activeBid?.status;
       const accepted = status === "accepted" || status === "handled";
       const expired  = status === "expired";
+      const declined = status === "declined";
       return (
         <div style={{ ...wrap, maxWidth:560, textAlign:"center", paddingTop:48 }}>
           <div style={{ width:72, height:72, borderRadius:"50%", background:"#F3F4F6", display:"flex", alignItems:"center", justifyContent:"center", fontSize:30, margin:"0 auto" }}>
@@ -908,7 +909,22 @@ function GuestView() {
               <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:30, color:"#047857", letterSpacing:"0.15em" }}>{bid.confirmationCode}</div>
             </div>
           )}
-          <button style={{ ...SL.ghostBtn, marginTop:24 }} onClick={reset}>Browse Again</button>
+          {declined && (
+            <>
+              <p style={{ color:SL.faint, maxWidth:340, margin:"14px auto 0", lineHeight:1.6, fontSize:13 }}>
+                Tip: bids closer to the listed rate are more likely to be accepted. Try offering a higher amount or browse other available rooms.
+              </p>
+              <div style={{ display:"flex", gap:10, maxWidth:340, margin:"22px auto 0" }}>
+                <button style={{ ...SL.primaryBtn, flex:1 }} onClick={() => { setBidAmount(""); setScreen("bid"); }}>
+                  Try a new bid
+                </button>
+                <button style={{ ...SL.ghostBtn, flex:1 }} onClick={reset}>
+                  Browse other hotels
+                </button>
+              </div>
+            </>
+          )}
+          {!declined && <button style={{ ...SL.ghostBtn, marginTop:24 }} onClick={reset}>Browse Again</button>}
         </div>
       );
     }
