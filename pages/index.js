@@ -9,6 +9,20 @@ import {
 } from "../lib/components";
 import { GoogleReviews } from "../lib/GoogleReviews"; // [GOOGLE-REVIEWS TEST]
 
+// ── Geolocation (stubbed, inactive) ─────────────────────────────────────────
+// Pilot-phase default: hardcoded city copy, all hotels shown, no API calls.
+// Flip to true to activate the /api/geolocate-driven flow built below — left
+// off so production behavior is unaffected by this infra.
+const GEOLOCATION_ENABLED = false;
+const PILOT_CITY_COPY = "Now live in Slidell, LA";
+
+// Fallback copy when geolocation finds no match for the visitor's city —
+// lists whatever pilot cities the loaded hotels actually have.
+function pilotCitiesCopy(hotels) {
+  const cities = [...new Set(hotels.map(h => h.city).filter(Boolean))];
+  return cities.length ? `Now live in: ${cities.join(", ")}` : PILOT_CITY_COPY;
+}
+
 function GuestProfileForm({ guest, onSaved, onSignOut }) {
   const [first, setFirst] = useState(guest.firstName || "");
   const [last, setLast]   = useState(guest.lastName || "");
@@ -75,7 +89,7 @@ function GuestProfileForm({ guest, onSaved, onSignOut }) {
 
 const HERO_FALLBACK = "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1600&q=80";
 const PROPERTY_TABS = ["Rooms", "Flats", "Hostels", "Villas"];
-function HotelListingView({ onSelectHotel, hotelsWithRooms }) {
+function HotelListingView({ onSelectHotel, hotelsWithRooms, locationCopy }) {
   const [query, setQuery] = useState("");
   const heroBg = hotelsWithRooms.find(h => h.heroImage)?.heroImage || HERO_FALLBACK;
 
@@ -95,8 +109,11 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms }) {
           <h1 style={{ fontFamily:"Space Grotesk,sans-serif", fontSize:40, fontWeight:700, letterSpacing:"-1px", margin:"0 0 12px", lineHeight:1.1 }}>
             Find tonight&apos;s room
           </h1>
-          <p style={{ fontSize:16, color:"rgba(255,255,255,0.9)", margin:"0 auto 28px", maxWidth:520, lineHeight:1.5 }}>
+          <p style={{ fontSize:16, color:"rgba(255,255,255,0.9)", margin:"0 auto 8px", maxWidth:520, lineHeight:1.5 }}>
             Name your rate at hotels with unsold rooms tonight. A private response in 10 minutes.
+          </p>
+          <p style={{ fontSize:13, fontWeight:600, color:"#F59E0B", margin:"0 auto 20px", letterSpacing:"0.02em" }}>
+            {locationCopy}
           </p>
 
           {/* Property-type tabs */}
@@ -305,6 +322,8 @@ function GuestView() {
   const [screen, setScreen]               = useState("listing");
   const [sideTab, setSideTab]             = useState("browse");
   const [hotels, setHotels]               = useState([]);
+  const [geoHotels, setGeoHotels]         = useState(null); // non-null only once a geolocation city match is found
+  const [locationCopy, setLocationCopy]   = useState(PILOT_CITY_COPY);
   const [bids, setBids]                   = useState([]);
   const [selectedHotel, setSelectedHotel] = useState(null);
   const [selectedRoom, setSelectedRoom]   = useState(null);
@@ -341,6 +360,32 @@ function GuestView() {
 
   // ── Load hotels once ──────────────────────────────────────────────────────
   useEffect(() => { api.getHotelsWithRooms().then(setHotels).catch(console.error); }, []);
+
+  // ── Geolocation (inactive while GEOLOCATION_ENABLED is false) ──────────────
+  // When enabled: look up the visitor's city server-side via /api/geolocate,
+  // then try to match it against loaded hotels. No match (the common pilot
+  // case) or any failure falls back silently to the all-hotels pilot copy —
+  // never an error shown to the guest.
+  useEffect(() => {
+    if (!GEOLOCATION_ENABLED || hotels.length === 0) return;
+    let cancelled = false;
+    fetch("/api/geolocate")
+      .then(r => r.json())
+      .then(({ city }) => {
+        if (cancelled) return;
+        const match = city ? hotels.filter(h => (h.city || "").toLowerCase() === city.toLowerCase()) : [];
+        if (match.length > 0) {
+          setGeoHotels(match);
+          setLocationCopy(`Now live in: ${city}`);
+        } else {
+          setLocationCopy(pilotCitiesCopy(hotels));
+        }
+      })
+      .catch(() => { if (!cancelled) setLocationCopy(pilotCitiesCopy(hotels)); });
+    return () => { cancelled = true; };
+  }, [hotels]);
+
+  const displayedHotels = geoHotels || hotels;
 
   // ── Restore session + subscribe to my requests ────────────────────────────
   useEffect(() => {
@@ -510,7 +555,7 @@ function GuestView() {
 
   // ── Main content area based on screen ──────────────────────────────────────
   function renderMain() {
-    if (screen === "listing") return <HotelListingView hotelsWithRooms={hotels} onSelectHotel={h => { setSelectedHotel(h); setScreen("hotel"); }} />;
+    if (screen === "listing") return <HotelListingView hotelsWithRooms={displayedHotels} locationCopy={locationCopy} onSelectHotel={h => { setSelectedHotel(h); setScreen("hotel"); }} />;
 
     if (screen === "hotel") {
       const fromPrice = Math.min(...selectedHotel.rooms.map(r=>r.rack));
@@ -947,7 +992,7 @@ function GuestView() {
       </div>
     );
 
-    return <HotelListingView hotelsWithRooms={hotels} onSelectHotel={h=>{setSelectedHotel(h);setScreen("hotel");}} />;
+    return <HotelListingView hotelsWithRooms={displayedHotels} locationCopy={locationCopy} onSelectHotel={h=>{setSelectedHotel(h);setScreen("hotel");}} />;
   }
 
   // ── Live requests panel (sidebar tab content) ──────────────────────────────
