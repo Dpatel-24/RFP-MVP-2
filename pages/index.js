@@ -3,9 +3,9 @@ import Head from "next/head";
 import * as api from "../lib/api";
 import { TIMER_SECONDS, COUNTER_TIMER, TAX_RATE, effectiveStatus, secondsLeft, getTodayKey } from "../lib/api";
 import {
-  shortDate, stayWindow, useWindowWidth, MOBILE_BREAKPOINT, BOTTOM_NAV_HEIGHT,
+  shortDate, stayWindow, useWindowWidth, MOBILE_BREAKPOINT,
   TimerRing, ImageOrIcon, Badge, StarDisplay, GuestProfileCard, PasswordLogin,
-  BookingCalendar, MobileBottomNav, S, SL,
+  BookingCalendar, S, SL,
 } from "../lib/components";
 import { GoogleReviews } from "../lib/GoogleReviews"; // [GOOGLE-REVIEWS TEST]
 
@@ -197,6 +197,93 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms }) {
         </div>
       </footer>
     </div>
+  );
+}
+
+// Booking.com-style top header for guest-facing pages. Replaces the old
+// left sidebar; collapses the right-side links into a hamburger dropdown
+// below the mobile breakpoint instead of a slide-out panel.
+function GuestHeader({ currentGuest, sideTab, selectTab, setScreen, handleSignOut, liveCount, savedCount, isMobile }) {
+  const [acctOpen, setAcctOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const navTabs = [
+    { id:"browse", label:"Browse" },
+    { id:"live",   label:"Live Requests", count: liveCount },
+    { id:"saved",  label:"Saved", count: savedCount },
+  ];
+
+  function go(id) { selectTab(id); setAcctOpen(false); setMenuOpen(false); }
+
+  return (
+    <header style={SL.headerBar}>
+      <div style={SL.headerInner}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer" }} onClick={() => go("browse")}>
+          <div style={SL.logo}>LK</div>
+          <div style={{ fontWeight:700, fontSize:15, color:SL.ink, fontFamily:"Space Grotesk,sans-serif" }}>LastKey</div>
+        </div>
+
+        {!isMobile && (
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            {currentGuest ? (
+              <>
+                {navTabs.map(t => (
+                  <button key={t.id} style={{ ...SL.headerNavBtn, ...(sideTab===t.id ? SL.headerNavActive : {}) }} onClick={() => go(t.id)}>
+                    {t.label}{t.count > 0 ? ` (${t.count})` : ""}
+                  </button>
+                ))}
+                <div style={{ position:"relative" }}>
+                  <button style={SL.headerAccountBtn} onClick={() => setAcctOpen(o=>!o)}>
+                    👤 {currentGuest.name || "Account"}
+                  </button>
+                  {acctOpen && (
+                    <div style={SL.headerDropdown} onMouseLeave={() => setAcctOpen(false)}>
+                      <button style={SL.headerDropdownItem} onClick={() => go("history")}>History</button>
+                      <button style={SL.headerDropdownItem} onClick={() => go("profile")}>My Profile</button>
+                      <button style={SL.headerDropdownItem} onClick={() => { setAcctOpen(false); handleSignOut(); }}>Sign out</button>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <a href="/for-hotels" style={SL.headerLink}>List your property</a>
+                <button style={SL.headerLink} onClick={() => setScreen("login")}>Register</button>
+                <button style={SL.headerBtnPrimary} onClick={() => setScreen("login")}>Sign in</button>
+              </>
+            )}
+          </div>
+        )}
+
+        {isMobile && (
+          <button style={SL.hamburgerBtn} onClick={() => setMenuOpen(o=>!o)} aria-label="Menu">☰</button>
+        )}
+      </div>
+
+      {isMobile && menuOpen && (
+        <div style={SL.mobileMenuPanel}>
+          {currentGuest ? (
+            <>
+              {navTabs.map(t => (
+                <button key={t.id} style={{ ...SL.mobileMenuItem, color: sideTab===t.id ? "#B45309" : "#374151" }} onClick={() => go(t.id)}>
+                  {t.label}{t.count > 0 ? ` (${t.count})` : ""}
+                </button>
+              ))}
+              <div style={{ borderTop:`1px solid ${SL.line}`, margin:"4px 6px" }} />
+              <button style={SL.mobileMenuItem} onClick={() => go("history")}>History</button>
+              <button style={SL.mobileMenuItem} onClick={() => go("profile")}>My Profile ({currentGuest.name})</button>
+              <button style={SL.mobileMenuItem} onClick={() => { setMenuOpen(false); handleSignOut(); }}>Sign out</button>
+            </>
+          ) : (
+            <>
+              <a href="/for-hotels" style={SL.mobileMenuItem}>List your property</a>
+              <button style={SL.mobileMenuItem} onClick={() => { setMenuOpen(false); setScreen("login"); }}>Register</button>
+              <button style={SL.mobileMenuItem} onClick={() => { setMenuOpen(false); setScreen("login"); }}>Sign in</button>
+            </>
+          )}
+        </div>
+      )}
+    </header>
   );
 }
 
@@ -1011,66 +1098,20 @@ function GuestView() {
         </div>
       )}
 
-      {!isMobile && (
-        <div style={{ ...SL.sidebar, width:210 }}>
-          <div style={{ marginBottom:24, display:"flex", alignItems:"center", gap:10 }}>
-            <div style={SL.logo}>LK</div>
-            {currentGuest
-              ? <div>
-                  <div style={{ fontWeight:700, fontSize:13, lineHeight:1.2, color:SL.ink }}>{currentGuest.name}</div>
-                  <div style={{ fontSize:11, color:SL.faint, marginTop:3 }}>
-                    {currentGuest.rating > 0 ? `⭐ ${currentGuest.rating.toFixed(1)}` : "New member"} · {currentGuest.stays} stays
-                  </div>
-                </div>
-              : <div>
-                  <div style={{ fontWeight:700, fontSize:14, color:SL.ink }}>LastKey</div>
-                  <div style={{ fontSize:11, color:SL.faint, marginTop:2 }}>Private rate requests</div>
-                </div>
-            }
-          </div>
+      <GuestHeader
+        currentGuest={currentGuest}
+        sideTab={sideTab}
+        selectTab={selectTab}
+        setScreen={setScreen}
+        handleSignOut={handleSignOut}
+        liveCount={myLive.length}
+        savedCount={savedHotelIds.size}
+        isMobile={isMobile}
+      />
 
-          <div style={{ display:"flex", flexDirection:"column", gap:2, flex:1 }}>
-            {[
-              { id:"browse",  label:"Browse Hotels" },
-              { id:"live",    label:"Live Requests", count: myLive.length },
-              { id:"history", label:"History",       count: myHistory.length },
-              { id:"saved",   label:"♥ Saved",       count: savedHotelIds.size },
-              { id:"profile", label: currentGuest ? "My Profile" : "Sign In" },
-            ].map(tab => (
-              <button key={tab.id}
-                style={{ ...SL.navItem, ...(sideTab===tab.id ? SL.navActive : {}) }}
-                onClick={() => selectTab(tab.id)}>
-                {tab.label}
-                {tab.count > 0 && <span style={SL.navBadge}>{tab.count}</span>}
-              </button>
-            ))}
-          </div>
-
-          {!currentGuest && (
-            <button style={{ ...SL.primaryBtn, marginTop:12, fontSize:13, padding:"11px 12px" }} onClick={()=>{ setSideTab("browse"); setScreen("login"); }}>
-              Sign In / Join
-            </button>
-          )}
-        </div>
-      )}
-
-      <div style={{ ...SL.content, padding: isMobile ? `0 0 ${BOTTOM_NAV_HEIGHT}px` : 0 }}>
+      <div style={SL.content}>
         {showPanel ? renderSideContent() : renderMain()}
       </div>
-
-      {isMobile && (
-        <MobileBottomNav
-          activeId={sideTab}
-          onSelect={selectTab}
-          tabs={[
-            { id:"browse",  label:"Browse",  icon:"🔍" },
-            { id:"live",    label:"Live",    icon:"⏱", count: myLive.length },
-            { id:"history", label:"History", icon:"🗓", count: myHistory.length },
-            { id:"saved",   label:"Saved",   icon:"♥", count: savedHotelIds.size },
-            { id:"profile", label: currentGuest ? "Profile" : "Sign In", icon:"👤" },
-          ]}
-        />
-      )}
     </div>
   );
 }
