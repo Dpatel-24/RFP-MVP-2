@@ -93,15 +93,52 @@ function GuestProfileForm({ guest, onSaved, onSignOut }) {
 
 const HERO_FALLBACK = "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1600&q=80";
 const PROPERTY_TABS = ["Rooms", "Flats", "Hostels", "Villas"];
-function HotelListingView({ onSelectHotel, hotelsWithRooms, locationCopy }) {
+
+// Unique city/location strings across the loaded hotels — drives the typeahead.
+function locationOptions(hotelsWithRooms) {
+  return [...new Set(hotelsWithRooms.flatMap(h => [h.city, h.location].filter(Boolean)))];
+}
+
+// Location input with a live typeahead dropdown. `options` are filtered as the
+// user types; picking one (or pressing Enter) calls onSubmit with that value.
+// Used by both the hero search bar and the search-results refine bar.
+function LocationField({ value, setValue, options, onSubmit, style }) {
+  const [open, setOpen] = useState(false);
+  const q = value.trim().toLowerCase();
+  const matches = (q ? options.filter(o => o.toLowerCase().includes(q)) : options).slice(0, 6);
+  return (
+    <div style={{ position:"relative", textAlign:"left", ...style }}>
+      <div style={SL.searchLabel}>Location</div>
+      <input
+        value={value}
+        onChange={e => { setValue(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        onKeyDown={e => { if (e.key === "Enter") { setOpen(false); onSubmit(value); } }}
+        placeholder="Which city do you prefer?"
+        style={SL.searchInput}
+      />
+      {open && matches.length > 0 && (
+        <div style={SL.typeahead}>
+          {matches.map(o => (
+            <button key={o} type="button"
+              onMouseDown={e => { e.preventDefault(); setValue(o); setOpen(false); onSubmit(o); }}
+              style={SL.typeaheadItem}
+              onMouseEnter={e => { e.currentTarget.style.background = "#F9FAFB"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "none"; }}>
+              <span style={{ fontSize:13 }}>📍</span>{o}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HotelListingView({ onSelectHotel, hotelsWithRooms, locationCopy, onSearch }) {
   const [query, setQuery] = useState("");
   const heroBg = hotelsWithRooms.find(h => h.heroImage)?.heroImage || HERO_FALLBACK;
-
-  const q = query.trim().toLowerCase();
-  const filtered = q
-    ? hotelsWithRooms.filter(h =>
-        [h.name, h.city, h.location].filter(Boolean).some(v => v.toLowerCase().includes(q)))
-    : hotelsWithRooms;
+  const allLocations = locationOptions(hotelsWithRooms);
 
   // Social-proof aggregates — real data from the loaded hotels (no fabrication).
   const hotelCount   = hotelsWithRooms.length;
@@ -143,16 +180,13 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms, locationCopy }) {
 
           {/* Search bar */}
           <div style={SL.searchBar}>
-            <div style={{ flex:2, textAlign:"left", padding:"0 18px" }}>
-              <div style={SL.searchLabel}>Location</div>
-              <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Which city do you prefer?" style={SL.searchInput} />
-            </div>
+            <LocationField value={query} setValue={setQuery} options={allLocations} onSubmit={onSearch} style={{ flex:2, padding:"0 18px" }} />
             <div style={SL.searchDivider} />
             <div style={{ flex:1.4, textAlign:"left", padding:"0 18px" }}>
               <div style={SL.searchLabel}>Check In · Check Out</div>
               <div style={SL.searchValue}>Tonight → tomorrow 11:00 AM</div>
             </div>
-            <button onClick={()=>{}} style={SL.searchBtn} aria-label="Search">🔍</button>
+            <button onClick={()=>onSearch(query)} style={SL.searchBtn} aria-label="Search">🔍</button>
           </div>
         </div>
       </div>
@@ -231,16 +265,16 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms, locationCopy }) {
             <span style={SL.mktEyebrow}>Available now</span>
             <h2 style={{ ...SL.mktTitle, fontSize:26, margin:0 }}>Rooms open tonight</h2>
           </div>
-          <span style={{ fontSize:13, color:"#6B7280" }}>{filtered.length} hotel{filtered.length===1?"":"s"} · New Orleans Area</span>
+          <span style={{ fontSize:13, color:"#6B7280" }}>{hotelsWithRooms.length} hotel{hotelsWithRooms.length===1?"":"s"} · New Orleans Area</span>
         </div>
 
-        {filtered.length === 0 ? (
+        {hotelsWithRooms.length === 0 ? (
           <div style={{ background:"#fff", border:"1px solid #E5E7EB", borderRadius:16, padding:"48px 24px", textAlign:"center", color:"#6B7280" }}>
-            No hotels match “{query}”. Try another city or name.
+            No hotels available right now. Check back tonight.
           </div>
         ) : (
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(300px, 1fr))", gap:22 }}>
-            {filtered.map(hotel => {
+            {hotelsWithRooms.map(hotel => {
               const fromPrice = Math.min(...hotel.rooms.map(r=>r.rack));
               return (
                 <div key={hotel.id} style={SL.card} onClick={() => onSelectHotel(hotel)}
@@ -269,6 +303,86 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms, locationCopy }) {
                     <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8 }}>
                       <StarDisplay rating={hotel.rating} />
                       <span style={{ fontSize:12, color:"#6B7280" }}>{hotel.rating} ({hotel.reviewCount} reviews)</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Search results page — reached from the hero search. Lists the hotels matching
+// the chosen location as full-width vertical cards (one per row). Includes a
+// refine bar (same typeahead) so the location can be changed without going back.
+function SearchResultsView({ hotelsWithRooms, searchLocation, onSelectHotel, onBack, onSearch }) {
+  const [query, setQuery] = useState(searchLocation || "");
+  const allLocations = locationOptions(hotelsWithRooms);
+
+  const q = (searchLocation || "").trim().toLowerCase();
+  const results = q
+    ? hotelsWithRooms.filter(h => [h.name, h.city, h.location].filter(Boolean).some(v => v.toLowerCase().includes(q)))
+    : hotelsWithRooms;
+
+  return (
+    <div style={{ background:"#F4F5F7", minHeight:"100%" }}>
+      <div style={{ maxWidth:980, margin:"0 auto", padding:"26px 24px 56px" }}>
+        <button style={SL.backBtn} onClick={onBack}>← All hotels</button>
+
+        {/* Refine search */}
+        <div style={{ ...SL.searchBar, maxWidth:"100%", boxShadow:"0 4px 18px rgba(0,0,0,0.10)", marginBottom:24 }}>
+          <LocationField value={query} setValue={setQuery} options={allLocations} onSubmit={onSearch} style={{ flex:1, padding:"0 18px" }} />
+          <button onClick={() => onSearch(query)} style={SL.searchBtn} aria-label="Search">🔍</button>
+        </div>
+
+        <h1 style={{ ...SL.h1, fontSize:24, marginBottom:4 }}>
+          {searchLocation ? `Hotels in ${searchLocation}` : "All hotels"}
+        </h1>
+        <div style={{ fontSize:13, color:"#6B7280", marginBottom:20 }}>
+          {results.length} hotel{results.length === 1 ? "" : "s"} available tonight
+        </div>
+
+        {results.length === 0 ? (
+          <div style={{ ...SL.panel, padding:"48px 24px", textAlign:"center", color:"#6B7280", fontSize:14 }}>
+            No hotels match “{searchLocation}”. Try another city or area.
+          </div>
+        ) : (
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            {results.map(hotel => {
+              const fromPrice = Math.min(...hotel.rooms.map(r => r.rack));
+              return (
+                <div key={hotel.id} style={{ ...SL.card, display:"flex", flexWrap:"wrap" }} onClick={() => onSelectHotel(hotel)}
+                  onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 10px 30px rgba(0,0,0,0.12)"; e.currentTarget.style.transform="translateY(-2px)";}}
+                  onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,0.06)"; e.currentTarget.style.transform="none";}}>
+                  <div style={{ position:"relative", width:280, flexShrink:0 }}>
+                    <img src={hotel.heroImage || HERO_FALLBACK} alt="" loading="lazy"
+                      style={{ width:"100%", height:200, objectFit:"cover", display:"block" }} />
+                    <span style={SL.tonightTag}>{hotel.rooms.length} room{hotel.rooms.length>1?"s":""} left tonight</span>
+                  </div>
+                  <div style={{ flex:1, minWidth:240, padding:"16px 18px", display:"flex", flexDirection:"column" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
+                      <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, lineHeight:1.25 }}>{hotel.name}</div>
+                      <div style={{ textAlign:"right", flexShrink:0 }}>
+                        <div style={{ fontSize:11, color:"#9CA3AF" }}>from</div>
+                        <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:22, color:"#0F766E" }}>${fromPrice}</div>
+                      </div>
+                    </div>
+                    <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotel.name + ' ' + hotel.location)}`}
+                      target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
+                      style={{ display:"inline-block", fontSize:13, color:"#6B7280", marginTop:4, textDecoration:"none", cursor:"pointer" }}
+                      onMouseEnter={e=>{ e.currentTarget.style.textDecoration="underline"; }}
+                      onMouseLeave={e=>{ e.currentTarget.style.textDecoration="none"; }}>
+                      📍 {hotel.location}
+                    </a>
+                    <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8 }}>
+                      <StarDisplay rating={hotel.rating} />
+                      <span style={{ fontSize:12, color:"#6B7280" }}>{hotel.rating} ({hotel.reviewCount} reviews)</span>
+                    </div>
+                    <div style={{ marginTop:"auto", paddingTop:14 }}>
+                      <span style={{ ...SL.headerBtnPrimary, display:"inline-block", padding:"9px 16px", fontSize:13 }}>View rooms →</span>
                     </div>
                   </div>
                 </div>
@@ -397,6 +511,7 @@ function GuestView() {
   const [hotels, setHotels]               = useState([]);
   const [geoHotels, setGeoHotels]         = useState(null); // non-null only once a geolocation city match is found
   const [locationCopy, setLocationCopy]   = useState(PILOT_CITY_COPY);
+  const [searchLocation, setSearchLocation] = useState(""); // committed location from the hero search
   const [bids, setBids]                   = useState([]);
   const [selectedHotel, setSelectedHotel] = useState(null);
   const [selectedRoom, setSelectedRoom]   = useState(null);
@@ -608,6 +723,9 @@ function GuestView() {
     setActiveBid(null); setBidAmount(""); setSelectedRoom(null); setSelectedHotel(null);
   }
 
+  // Commit a location from the search bar and show the results page.
+  function runSearch(loc) { setSearchLocation((loc || "").trim()); setScreen("search"); }
+
   // ── Save / unsave a hotel (optimistic, reverts on failure) ─────────────────
   async function toggleSave(hotel) {
     if (!currentGuest) { setScreen("login"); return; }
@@ -632,7 +750,17 @@ function GuestView() {
 
   // ── Main content area based on screen ──────────────────────────────────────
   function renderMain() {
-    if (screen === "listing") return <HotelListingView hotelsWithRooms={displayedHotels} locationCopy={locationCopy} onSelectHotel={h => { setSelectedHotel(h); setScreen("hotel"); }} />;
+    if (screen === "listing") return <HotelListingView hotelsWithRooms={displayedHotels} locationCopy={locationCopy} onSearch={runSearch} onSelectHotel={h => { setSelectedHotel(h); setScreen("hotel"); }} />;
+
+    if (screen === "search") return (
+      <SearchResultsView
+        hotelsWithRooms={hotels}
+        searchLocation={searchLocation}
+        onSearch={(loc)=>setSearchLocation((loc || "").trim())}
+        onBack={()=>setScreen("listing")}
+        onSelectHotel={h => { setSelectedHotel(h); setScreen("hotel"); }}
+      />
+    );
 
     if (screen === "hotel") {
       const fromPrice = Math.min(...selectedHotel.rooms.map(r=>r.rack));
@@ -1069,7 +1197,7 @@ function GuestView() {
       </div>
     );
 
-    return <HotelListingView hotelsWithRooms={displayedHotels} locationCopy={locationCopy} onSelectHotel={h=>{setSelectedHotel(h);setScreen("hotel");}} />;
+    return <HotelListingView hotelsWithRooms={displayedHotels} locationCopy={locationCopy} onSearch={runSearch} onSelectHotel={h=>{setSelectedHotel(h);setScreen("hotel");}} />;
   }
 
   // ── Live requests panel (sidebar tab content) ──────────────────────────────
