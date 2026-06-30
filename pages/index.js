@@ -9,11 +9,11 @@ import {
 } from "../lib/components";
 import { GoogleReviews } from "../lib/GoogleReviews"; // [GOOGLE-REVIEWS TEST]
 
-// ── Geolocation (stubbed, inactive) ─────────────────────────────────────────
-// Pilot-phase default: hardcoded city copy, all hotels shown, no API calls.
-// Flip to true to activate the /api/geolocate-driven flow built below — left
-// off so production behavior is unaffected by this infra.
-const GEOLOCATION_ENABLED = false;
+// ── Geolocation ──────────────────────────────────────────────────────────────
+// Active: homepage calls /api/geolocate and shows the visitor's detected
+// city/region. Falls back to the pilot-cities copy (all hotels shown) on no
+// match or any failure — see pilotCitiesCopy() and the effect below.
+const GEOLOCATION_ENABLED = true;
 const PILOT_CITY_COPY = "Now live in Slidell, LA";
 
 // Fallback copy when geolocation finds no match for the visitor's city —
@@ -361,7 +361,7 @@ function GuestView() {
   // ── Load hotels once ──────────────────────────────────────────────────────
   useEffect(() => { api.getHotelsWithRooms().then(setHotels).catch(console.error); }, []);
 
-  // ── Geolocation (inactive while GEOLOCATION_ENABLED is false) ──────────────
+  // ── Geolocation ──────────────────────────────────────────────────────────
   // When enabled: look up the visitor's city server-side via /api/geolocate,
   // then try to match it against loaded hotels. No match (the common pilot
   // case) or any failure falls back silently to the all-hotels pilot copy —
