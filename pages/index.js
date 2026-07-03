@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
+import { useRouter } from "next/router";
 import * as api from "../lib/api";
 import { TIMER_SECONDS, COUNTER_TIMER, TAX_RATE, effectiveStatus, secondsLeft, getTodayKey } from "../lib/api";
 import {
@@ -8,6 +9,25 @@ import {
   BookingCalendar, SL,
 } from "../lib/components";
 import { GoogleReviews } from "../lib/GoogleReviews"; // [GOOGLE-REVIEWS TEST]
+import { HomeSuitely } from "../lib/HomeSuitely"; // [HOME-V2 DRAFT]
+
+// ── [HOME-V2 DRAFT] Homepage A/B switch ──────────────────────────────────────
+// Two homepage candidates exist while we decide:
+//   "classic" = current page (HotelListingView below: dark photo hero, Hopper
+//               marketing sections, listing grid)
+//   "suitely" = lib/HomeSuitely.js (neutral split hero, USA map, city tiles,
+//               guarantee band)
+// Preview either on the live site without redeploying:
+//   /?home=v2 -> suitely draft      /?home=v1 -> force classic
+// HOME_VARIANT is what everyone gets with no ?home= param.
+//
+// TO PICK ONE AND DELETE THE OTHER:
+//   Keep classic -> delete lib/HomeSuitely.js, its import above, this block,
+//                   and homeVariant/renderHome in GuestView (call
+//                   HotelListingView directly again).
+//   Keep suitely -> set HOME_VARIANT = "suitely", then delete HotelListingView
+//                   below and simplify renderHome the same way.
+const HOME_VARIANT = "classic";
 
 // ── Geolocation ──────────────────────────────────────────────────────────────
 // Active: homepage calls /api/geolocate and shows the visitor's detected
@@ -531,6 +551,13 @@ function GuestView() {
   const timerRef = useRef(null);
   const bootedUid = useRef(undefined); // last user id we booted for — dedupes token-refresh/focus re-fires
 
+  // [HOME-V2 DRAFT] resolve which homepage to show: ?home=v2 / ?home=v1
+  // override the HOME_VARIANT default (draft preview without redeploys).
+  const router = useRouter();
+  const homeVariant =
+    router.query.home === "v2" ? "suitely" :
+    router.query.home === "v1" ? "classic" : HOME_VARIANT;
+
   const width = useWindowWidth();
   const isMobile = width < MOBILE_BREAKPOINT;
   // Mobile content wrappers: full width, tighter 16px gutters, room for bottom nav.
@@ -751,7 +778,13 @@ function GuestView() {
 
   // ── Main content area based on screen ──────────────────────────────────────
   function renderMain() {
-    if (screen === "listing") return <HotelListingView hotelsWithRooms={displayedHotels} locationCopy={locationCopy} onSearch={runSearch} onSelectHotel={h => { setSelectedHotel(h); setScreen("hotel"); }} />;
+    // [HOME-V2 DRAFT] one place decides which homepage renders.
+    const renderHome = () =>
+      homeVariant === "suitely"
+        ? <HomeSuitely hotelsWithRooms={displayedHotels} locationCopy={locationCopy} onSearch={runSearch} />
+        : <HotelListingView hotelsWithRooms={displayedHotels} locationCopy={locationCopy} onSearch={runSearch} onSelectHotel={h => { setSelectedHotel(h); setScreen("hotel"); }} />;
+
+    if (screen === "listing") return renderHome();
 
     if (screen === "search") return (
       <SearchResultsView
@@ -1198,7 +1231,7 @@ function GuestView() {
       </div>
     );
 
-    return <HotelListingView hotelsWithRooms={displayedHotels} locationCopy={locationCopy} onSearch={runSearch} onSelectHotel={h=>{setSelectedHotel(h);setScreen("hotel");}} />;
+    return renderHome();
   }
 
   // ── Live requests panel (sidebar tab content) ──────────────────────────────
