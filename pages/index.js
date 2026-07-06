@@ -8,6 +8,7 @@ import {
   TimerRing, ImageOrIcon, Badge, StarDisplay, GuestProfileCard, PasswordLogin,
   BookingCalendar, SL,
 } from "../lib/components";
+import { elevation } from "../lib/tokens";
 import { GoogleReviews } from "../lib/GoogleReviews"; // [GOOGLE-REVIEWS TEST]
 import { HomeSuitely } from "../lib/HomeSuitely"; // [HOME-V2 DRAFT]
 
@@ -299,8 +300,8 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms, locationCopy, onSear
               const fromPrice = Math.min(...hotel.rooms.map(r=>r.rack));
               return (
                 <div key={hotel.id} style={SL.card} onClick={() => onSelectHotel(hotel)}
-                  onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 10px 30px rgba(0,0,0,0.12)"; e.currentTarget.style.transform="translateY(-2px)";}}
-                  onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,0.06)"; e.currentTarget.style.transform="none";}}>
+                  onMouseEnter={e=>{e.currentTarget.style.boxShadow=elevation.interactiveHover; e.currentTarget.style.transform="translateY(-2px)";}}
+                  onMouseLeave={e=>{e.currentTarget.style.boxShadow=elevation.interactiveResting; e.currentTarget.style.transform="none";}}>
                   <div style={{ position:"relative" }}>
                     <img src={hotel.heroImage || HERO_FALLBACK} alt="" loading="lazy"
                       style={{ width:"100%", height:190, objectFit:"cover", display:"block" }} />
@@ -376,8 +377,8 @@ function SearchResultsView({ hotelsWithRooms, searchLocation, onSelectHotel, onB
               const fromPrice = Math.min(...hotel.rooms.map(r => r.rack));
               return (
                 <div key={hotel.id} style={{ ...SL.card, display:"flex", flexWrap:"wrap" }} onClick={() => onSelectHotel(hotel)}
-                  onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 10px 30px rgba(0,0,0,0.12)"; e.currentTarget.style.transform="translateY(-2px)";}}
-                  onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,0.06)"; e.currentTarget.style.transform="none";}}>
+                  onMouseEnter={e=>{e.currentTarget.style.boxShadow=elevation.interactiveHover; e.currentTarget.style.transform="translateY(-2px)";}}
+                  onMouseLeave={e=>{e.currentTarget.style.boxShadow=elevation.interactiveResting; e.currentTarget.style.transform="none";}}>
                   <div style={{ position:"relative", width:280, flexShrink:0 }}>
                     <img src={hotel.heroImage || HERO_FALLBACK} alt="" loading="lazy"
                       style={{ width:"100%", height:200, objectFit:"cover", display:"block" }} />
