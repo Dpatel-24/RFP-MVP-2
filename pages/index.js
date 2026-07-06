@@ -1027,7 +1027,6 @@ function GuestView() {
       <div style={{ ...wrap, maxWidth:480 }}>
         <button style={SL.backBtn} onClick={() => setScreen("listing")}>← Back</button>
         <PasswordLogin
-          light
           eyebrow="Guest Profile"
           title="Sign in to bid"
           blurb="Sign in or create an account with email and password. Your star rating is visible to hotels when you bid — no other personal info is shared."
@@ -1039,7 +1038,7 @@ function GuestView() {
     if (screen === "bid") return (
       <div style={{ ...wrap, maxWidth:560 }}>
         <button style={SL.backBtn} onClick={() => setScreen("hotel")}>← Back</button>
-        {currentGuest && <div style={{ marginBottom:14 }}><GuestProfileCard guest={currentGuest} compact light /></div>}
+        {currentGuest && <div style={{ marginBottom:14 }}><GuestProfileCard guest={currentGuest} compact /></div>}
         <div style={{ ...SL.panel, overflow:"hidden", marginBottom:14 }}>
           <ImageOrIcon url={selectedRoom.imageUrl} type={selectedRoom.image} height={190} radius={0} />
           <div style={{ padding:"12px 16px" }}>
@@ -1333,7 +1332,7 @@ function GuestView() {
             )}
           </div>
 
-          <BookingCalendar light bids={myBids} selectedDate={guestDate} onSelect={setGuestDate} />
+          <BookingCalendar bids={myBids} selectedDate={guestDate} onSelect={setGuestDate} />
           <div style={SL.sectionLabel}>{shortDate(guestDate)} · {dayBids.length} request{dayBids.length===1?"":"s"}</div>
           {dayBids.length === 0
             ? <div style={{ ...SL.panel, padding:"36px 24px", textAlign:"center", color:SL.sub, fontSize:14 }}>No requests on this day.</div>

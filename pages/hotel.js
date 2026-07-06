@@ -283,7 +283,6 @@ function HotelDashboard() {
               title="Hotel sign in"
               blurb="Sign in with your property's email and password. You'll see live rate requests for your hotel only."
               onSignedIn={() => {}}
-              light
             />
           )}
         </div>
@@ -422,7 +421,7 @@ function HotelDashboard() {
                             onClick={()=>setExpandedGuest(expandedGuest===bid.id?null:bid.id)}>
                             {expandedGuest===bid.id?"Hide":"View"} Guest Profile
                           </button>
-                          {expandedGuest===bid.id && <GuestProfileCard guest={bid.guest} compact light />}
+                          {expandedGuest===bid.id && <GuestProfileCard guest={bid.guest} compact />}
                         </div>
                       )}
 
@@ -462,7 +461,7 @@ function HotelDashboard() {
               <h2 style={SL.dashTitle}>Reservations</h2>
               <span style={{ color:"#6B7280", fontSize:14 }}>Tap a day to see its requests. The selected day also drives KPIs.</span>
             </div>
-            <BookingCalendar light bids={bids} selectedDate={selectedDate} onSelect={setSelectedDate} />
+            <BookingCalendar bids={bids} selectedDate={selectedDate} onSelect={setSelectedDate} />
             <div style={SL.sectionLabel}>{shortDate(selectedDate)} · {dayBids.length} request{dayBids.length===1?"":"s"}</div>
             {dayBids.length === 0
               ? <div style={SL.emptyState}><div style={{ color:"#6B7280", fontSize:13 }}>No requests on this day.</div></div>
