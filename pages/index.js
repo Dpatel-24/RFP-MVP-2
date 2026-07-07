@@ -8,7 +8,7 @@ import {
   TimerRing, ImageOrIcon, Badge, StarDisplay, GuestProfileCard, PasswordLogin,
   BookingCalendar, SL,
 } from "../lib/components";
-import { elevation } from "../lib/tokens";
+import { elevation, radius } from "../lib/tokens";
 import { GoogleReviews } from "../lib/GoogleReviews"; // [GOOGLE-REVIEWS TEST]
 import { HomeSuitely } from "../lib/HomeSuitely"; // [HOME-V2 DRAFT]
 import { HotelCard } from "../components/HotelCard";
@@ -961,6 +961,20 @@ function GuestView() {
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:14 }}>
                 <span style={{ color:SL.sub }}>From</span><strong style={{ color:SL.price }}>${fromPrice}</strong>
               </div>
+              {/* Informational only: deposit is a hold collected by the hotel at
+                  check-in, never through LastKey. Hidden when 0/null. */}
+              {selectedHotel.depositAmount > 0 && (
+                <div style={{ borderTop:`1px solid ${SL.line}`, marginTop:14, paddingTop:12, display:"flex", justifyContent:"space-between", gap:10, fontSize:13 }}>
+                  <span style={{ color:SL.sub }}>Security deposit <span style={{ color:SL.faint }}>(refundable hold, at check-in)</span></span>
+                  <strong style={{ whiteSpace:"nowrap" }}>${selectedHotel.depositAmount}</strong>
+                </div>
+              )}
+              {selectedHotel.phone && (
+                <div style={{ marginTop: selectedHotel.depositAmount > 0 ? 8 : 14, display:"flex", justifyContent:"space-between", gap:10, fontSize:13 }}>
+                  <span style={{ color:SL.sub }}>Hotel phone</span>
+                  <a href={`tel:${selectedHotel.phone}`} style={{ color:SL.ink, fontWeight:600, textDecoration:"none" }}>{selectedHotel.phone}</a>
+                </div>
+              )}
               <div style={{ marginTop:14, fontSize:12, color:SL.sub, lineHeight:1.6 }}>
                 Pick a room and name your nightly rate — the hotel responds within 10 minutes.
               </div>
@@ -1019,6 +1033,25 @@ function GuestView() {
           {!currentGuest && (
             <div style={{ padding:"10px 14px", background:"#FEF3E2", borderRadius:8, fontSize:13, color:"#B45309", marginBottom:14 }}>
               Sign in to submit a bid. Hotels will see your rating — nothing else.
+            </div>
+          )}
+          {/* Price breakdown — informational display only. The deposit is a hold
+              the HOTEL collects at check-in; it is never added to the bid amount,
+              tax, or anything LastKey submits or charges. */}
+          {Number(bidAmount) >= 1 && (
+            <div style={{ border:`1px solid ${SL.line}`, borderRadius:radius.md, padding:"12px 14px", marginBottom:16 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:SL.sub, marginBottom:6 }}>
+                <span>Your bid</span><span style={{ color:SL.ink, fontWeight:600 }}>${Math.round(Number(bidAmount))}</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:SL.sub }}>
+                <span>Estimated tax</span><span style={{ color:SL.ink, fontWeight:600 }}>${Math.round(Number(bidAmount) * TAX_RATE)}</span>
+              </div>
+              {selectedHotel?.depositAmount > 0 && (
+                <div style={{ borderTop:`1px solid ${SL.line}`, marginTop:10, paddingTop:10, display:"flex", justifyContent:"space-between", gap:10, fontSize:13, color:SL.sub }}>
+                  <span>Security deposit <span style={{ color:SL.faint }}>(refundable hold, paid at hotel — not charged by LastKey)</span></span>
+                  <span style={{ color:SL.ink, fontWeight:600, whiteSpace:"nowrap" }}>${selectedHotel.depositAmount}</span>
+                </div>
+              )}
             </div>
           )}
           <div style={{ fontSize:12, color:SL.sub, lineHeight:1.6, marginBottom:16 }}>If accepted, you'll receive a confirmation code to give the hotel at check-in. No payment is taken here — LastKey just delivers your request.</div>

@@ -105,6 +105,8 @@ function HotelDashboard() {
   const [guestStats, setGuestStats] = useState({}); // guest_id -> { rating, stays, verified } trust signals
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [showAdd, setShowAdd]           = useState(false);
+  const [infoInputs, setInfoInputs]     = useState({}); // { deposit, phone } — informational hotel fields
+  const [infoSaved, setInfoSaved]       = useState(false);
   const [newRoom, setNewRoom]           = useState({ name:"", room_type:"", rack_rate:"", bid_floor:"", inventory_count:"1", amenities:"" });
   const prevCount = useRef(null); // null until first bids load — avoids a false toast on mount
   const bootedUid = useRef(undefined); // last user id booted — dedupes token-refresh/focus re-fires
@@ -208,6 +210,20 @@ function HotelDashboard() {
     setRooms(prev => prev.map(r => r.id===roomId ? { ...r, inventoryCount:next, available:next>0 } : r));
     try { await api.setInventory(roomId, next); } catch (e) { console.error(e); alert("Could not update inventory."); reloadRooms(); }
   }
+  // Informational hotel fields (deposit hold + phone). Display-only — these
+  // never touch bids, revenue, or the KPI tab.
+  async function onSaveHotelInfo() {
+    const deposit = Math.max(0, Number(infoInputs.deposit ?? hotel.depositAmount) || 0);
+    const phone = (infoInputs.phone ?? hotel.phone ?? "").trim() || null;
+    try {
+      await api.updateHotelInfo(hotel.id, { deposit_amount: deposit, phone });
+      setHotel(h => ({ ...h, depositAmount: deposit, phone }));
+      setInfoInputs({});
+      setInfoSaved(true);
+      setTimeout(() => setInfoSaved(false), 2500);
+    } catch (e) { console.error(e); alert("Could not update hotel info."); }
+  }
+
   async function onSaveRack(roomId) {
     const v = parseFloat(rackInputs[roomId]);
     if (Number.isNaN(v)) return;
@@ -558,6 +574,33 @@ function HotelDashboard() {
               <button style={{ ...SL.submitBtn, width:"auto", padding:"10px 16px" }} onClick={()=>setShowAdd(s=>!s)}>
                 {showAdd ? "Close" : "+ Add Room Type"}
               </button>
+            </div>
+
+            {/* Informational hotel fields — never shown in KPIs & Analytics. */}
+            <div style={{ ...SL.formCard, marginBottom:16 }}>
+              <div style={SL.formTitle}>Hotel Info</div>
+              <div style={{ color:"#6B7280", fontSize:13, marginBottom:12, lineHeight:1.55 }}>
+                Shown to guests for information only. The security deposit is a refundable hold you collect at
+                check-in — it is never charged through LastKey and never counts toward bids or revenue.
+              </div>
+              <div style={{ display:"flex", gap:16, flexWrap:"wrap", alignItems:"flex-end" }}>
+                <div>
+                  <div style={SL.settingLabel}>Security deposit ($)</div>
+                  <input style={{ ...SL.settingInput, width:100 }} type="number" min="0"
+                    value={infoInputs.deposit ?? hotel.depositAmount ?? 0}
+                    onChange={e=>setInfoInputs(p=>({ ...p, deposit:e.target.value }))} />
+                </div>
+                <div style={{ flex:"1 1 220px", maxWidth:300 }}>
+                  <div style={SL.settingLabel}>Hotel phone</div>
+                  <input style={{ ...SL.field }} type="tel" placeholder="(555) 555-5555"
+                    value={infoInputs.phone ?? hotel.phone ?? ""}
+                    onChange={e=>setInfoInputs(p=>({ ...p, phone:e.target.value }))} />
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <button style={SL.settingSet} onClick={onSaveHotelInfo}>Save</button>
+                  {infoSaved && <span style={{ fontSize:13, color:"#059669", fontWeight:600 }}>Saved</span>}
+                </div>
+              </div>
             </div>
 
             {showAdd && (
