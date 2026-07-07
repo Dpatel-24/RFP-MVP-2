@@ -11,6 +11,7 @@ import {
 import { elevation } from "../lib/tokens";
 import { GoogleReviews } from "../lib/GoogleReviews"; // [GOOGLE-REVIEWS TEST]
 import { HomeSuitely } from "../lib/HomeSuitely"; // [HOME-V2 DRAFT]
+import { HotelCard } from "../components/HotelCard";
 
 // ── [HOME-V2 DRAFT] Homepage A/B switch ──────────────────────────────────────
 // Two homepage candidates exist while we decide:
@@ -30,14 +31,28 @@ import { HomeSuitely } from "../lib/HomeSuitely"; // [HOME-V2 DRAFT]
 //                   below and simplify renderHome the same way.
 const HOME_VARIANT = "classic";
 
-// ── Geolocation ──────────────────────────────────────────────────────────────
-// Active: homepage calls /api/geolocate and shows the visitor's detected
-// city/region. Hotel inventory only filters to that city on an exact match;
-// otherwise all pilot hotels stay visible (no empty state) — but the detected
-// city is still surfaced in the copy so it's visibly working even when there's
-// no pilot inventory there yet. See the effect in GuestView.
-const GEOLOCATION_ENABLED = true;
-const PILOT_CITY_COPY = "Now live in Slidell, LA";
+// ── Homepage constants ────────────────────────────────────────────────────────
+// These are the only values that change when a new city launches. Nothing else
+// on the page hardcodes city names or counts.
+// (The image ID from the design spec 404s on Unsplash; same params, working photo.)
+const HERO_IMAGE_URL = "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1600&h=900&fit=crop&q=80";
+const PILOT_CITY_LABEL = "Greater New Orleans";
+const PILOT_CITY_HOTEL_COUNT = 2;
+const FOR_HOTELS_URL = "/for-hotels";
+// When true, the Available Now label reads "near you" and the /api/geolocate
+// effect in GuestView runs (city-match filtering). That label is the only UI
+// this flag affects right now.
+const GEOLOCATION_ENABLED = false;
+const PILOT_CITY_COPY = "Now live in Slidell, LA"; // still used by the V2 draft hero
+// City grid (Section 4) — adding a city is one array entry, nothing else.
+const CITIES = [
+  {
+    label: PILOT_CITY_LABEL,
+    hotelCount: PILOT_CITY_HOTEL_COUNT,
+    image: HERO_IMAGE_URL,
+    tag: "Now live",
+  },
+];
 
 // Fallback copy when geolocation finds no hotel match for the visitor's city —
 // lists whatever pilot cities the loaded hotels actually have, and names the
@@ -157,182 +172,105 @@ function LocationField({ value, setValue, options, style }) {
   );
 }
 
-function HotelListingView({ onSelectHotel, hotelsWithRooms, locationCopy, onSearch }) {
-  const [query, setQuery] = useState("");
-  const heroBg = hotelsWithRooms.find(h => h.heroImage)?.heroImage || HERO_FALLBACK;
-  const allLocations = locationOptions(hotelsWithRooms);
+function HotelListingView({ onSelectHotel, hotelsWithRooms }) {
+  const width = useWindowWidth();
+  const isMobile = width < MOBILE_BREAKPOINT;
+  const pad = isMobile ? "48px 20px" : "80px 24px";
+  const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
 
-  // Social-proof aggregates — real data from the loaded hotels (no fabrication).
-  const hotelCount   = hotelsWithRooms.length;
-  const ratedHotels  = hotelsWithRooms.filter(h => h.rating > 0);
-  const avgRating    = ratedHotels.length ? ratedHotels.reduce((s,h)=>s+h.rating,0)/ratedHotels.length : 0;
-  const totalReviews = hotelsWithRooms.reduce((s,h)=>s+(h.reviewCount||0),0);
+  const steps = [
+    ["1", "Browse available rooms tonight", "Real rooms hotels still have open tonight, listed with their standard rates."],
+    ["2", "Name your price — private, one tap", "Your offer goes straight to the hotel. Nobody else ever sees it."],
+    ["3", "Hotel responds in 10 minutes. Accept or walk away.", "No card charged here. If accepted, you pay the hotel directly at check-in."],
+  ];
 
   return (
-    <div style={{ background:"#F4F5F7", color:"#1A1F2B", fontFamily:"Inter,sans-serif", minHeight:"100vh" }}>
-      {/* Hero */}
-      <div style={{ position:"relative", padding:"0 0 64px" }}>
-        <div style={{ position:"absolute", inset:0, backgroundImage:`url(${heroBg})`, backgroundSize:"cover", backgroundPosition:"center" }} />
-        <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg, rgba(10,15,30,0.55) 0%, rgba(10,15,30,0.35) 45%, rgba(244,245,247,1) 100%)" }} />
-        <div style={{ position:"relative", maxWidth:1080, margin:"0 auto", padding:"64px 24px 0", textAlign:"center", color:"#fff" }}>
-          <h1 style={{ fontFamily:"Space Grotesk,sans-serif", fontSize:40, fontWeight:700, letterSpacing:"-1px", margin:"0 0 12px", lineHeight:1.1 }}>
-            Find tonight&apos;s room
+    <div style={{ background:"#fff", color:SL.ink, fontFamily:"Inter,sans-serif" }}>
+      {/* ── Section 1: Hero ─────────────────────────────────────────────── */}
+      <section style={{ ...SL.heroWrap, backgroundImage:`url(${HERO_IMAGE_URL})` }}>
+        <div style={SL.heroOverlay} />
+        <div style={{ position:"relative", textAlign:"center", padding:"0 24px", maxWidth:820 }}>
+          <h1 style={{ ...SL.heroTitle, fontSize: isMobile ? 36 : 52 }}>
+            Name your price. Hotels respond in 10 minutes.
           </h1>
-          <p style={{ fontSize:16, color:"rgba(255,255,255,0.9)", margin:"0 auto 8px", maxWidth:520, lineHeight:1.5 }}>
-            Name your rate at hotels with unsold rooms tonight. A private response in 10 minutes.
-          </p>
-          <p style={{ fontSize:13, fontWeight:600, color:"#F59E0B", margin:"0 auto 20px", letterSpacing:"0.02em" }}>
-            {locationCopy}
-          </p>
-
-          {/* Property-type tabs */}
-          <div style={{ display:"inline-flex", gap:28, marginBottom:18 }}>
-            {PROPERTY_TABS.map((t) => {
-              const active = t === "Rooms";
-              return (
-                <span key={t} title={active ? "" : "Coming soon"}
-                  style={{ fontSize:14, fontWeight:600, paddingBottom:6, cursor: active ? "default" : "not-allowed",
-                    color: active ? "#fff" : "rgba(255,255,255,0.55)",
-                    borderBottom: active ? "2px solid #F59E0B" : "2px solid transparent" }}>
-                  {t}
-                </span>
-              );
-            })}
-          </div>
-
-          {/* Search bar */}
-          <div style={SL.searchBar}>
-            <LocationField value={query} setValue={setQuery} options={allLocations} style={{ flex:2, padding:"0 18px" }} />
-            <div style={SL.searchDivider} />
-            <div style={{ flex:1.4, textAlign:"left", padding:"0 18px" }}>
-              <div style={SL.searchLabel}>Check In · Check Out</div>
-              <div style={SL.searchValue}>Tonight → tomorrow 11:00 AM</div>
-            </div>
-            <button onClick={()=>onSearch(query)} style={SL.searchBtn} aria-label="Search">🔍</button>
-          </div>
+          <p style={SL.heroSub}>Bid on tonight&apos;s unsold rooms. No markups. No middleman pricing.</p>
+          <button style={{ ...SL.heroCta, marginTop:34 }} onClick={() => scrollTo("available-now")}
+            onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}>
+            See tonight&apos;s rooms
+          </button>
         </div>
-      </div>
+      </section>
 
-      {/* ── Why LastKey (value props) ───────────────────────────────── */}
-      <section style={SL.mktSection}>
-        <span style={SL.mktEyebrow}>Why LastKey</span>
-        <h2 style={SL.mktTitle}>A smarter way to book tonight</h2>
-        <p style={SL.mktSub}>No fixed prices, no auctions you can&apos;t see. Name what you&apos;d pay and let the hotel answer — privately, in minutes.</p>
-        <div style={SL.valueGrid}>
-          {[
-            { icon:"🏷️", bg:"#FEF3E2", title:"Name your rate",   body:"Tell the hotel what you'd pay tonight. You set the number — not a fixed nightly price." },
-            { icon:"⚡",  bg:"#ECFDF5", title:"10-minute answers", body:"Hotels accept, decline, or counter your offer — usually within ten minutes." },
-            { icon:"🌙",  bg:"#F5F3FF", title:"Tonight only",      body:"Real unsold rooms released at the last minute, at rates you won't find publicly." },
-            { icon:"🔒",  bg:"#EFF6FF", title:"Private by design", body:"Hotels only ever see your star rating — never your name, email, or phone." },
-          ].map(v => (
-            <div key={v.title} style={{ ...SL.valueCard, background:v.bg }}>
-              <div style={SL.valueIcon}>{v.icon}</div>
-              <div style={SL.valueCardTitle}>{v.title}</div>
-              <div style={SL.valueCardBody}>{v.body}</div>
+      {/* ── Section 2: How it works ─────────────────────────────────────── */}
+      <section id="how-it-works" style={{ background:"#fff", padding:pad }}>
+        <div style={SL.homeLabel}>How it works</div>
+        <div style={{ maxWidth:1000, margin: isMobile ? "36px auto 0" : "56px auto 0",
+          display:"flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 40 : 56 }}>
+          {steps.map(([n, label, copy]) => (
+            <div key={n} style={{ flex:1 }}>
+              <div style={SL.stepNumBig}>{n}</div>
+              <div style={SL.stepLabel}>{label}</div>
+              <div style={SL.stepCopy}>{copy}</div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── How it works ────────────────────────────────────────────── */}
-      <section style={SL.mktSection}>
-        <span style={SL.mktEyebrow}>How it works</span>
-        <h2 style={SL.mktTitle}>Three steps to your room</h2>
-        <p style={SL.mktSub}>From offer to check-in, the whole thing takes about ten minutes.</p>
-        <div style={SL.stepGrid}>
-          {[
-            { n:"1", title:"Name your rate",    body:"Pick a room and offer what you'd pay for tonight's stay." },
-            { n:"2", title:"Get a fast answer", body:"The hotel accepts, declines, or counters — usually in about 10 minutes." },
-            { n:"3", title:"Show your code",    body:"Give the confirmation code at check-in and pay the hotel directly. No card charged here." },
-          ].map(s => (
-            <div key={s.n} style={SL.stepCard}>
-              <div style={SL.stepNum}>{s.n}</div>
-              <div style={SL.valueCardTitle}>{s.title}</div>
-              <div style={{ ...SL.valueCardBody, marginTop:6 }}>{s.body}</div>
+      {/* ── Section 3: Available now ────────────────────────────────────── */}
+      <section id="available-now" style={{ background:"#F4F5F7", padding:pad }}>
+        <div style={SL.homeLabel}>
+          {GEOLOCATION_ENABLED ? "Available tonight near you" : `Available tonight in ${PILOT_CITY_LABEL}`}
+        </div>
+        <div style={{ maxWidth:880, margin: isMobile ? "32px auto 0" : "48px auto 0" }}>
+          {hotelsWithRooms.length === 0 ? (
+            <div style={{ ...SL.panel, padding:"48px 24px", textAlign:"center", color:SL.sub }}>
+              No hotels available right now. Check back tonight.
             </div>
-          ))}
+          ) : (
+            <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap:22 }}>
+              {hotelsWithRooms.map(hotel => <HotelCard key={hotel.id} hotel={hotel} onSelect={onSelectHotel} />)}
+            </div>
+          )}
         </div>
       </section>
 
-      {/* ── Social proof / trust band ───────────────────────────────── */}
-      <section style={SL.mktSection}>
-        <div style={SL.trustBand}>
-          <div style={{ maxWidth:340 }}>
-            <h2 style={{ ...SL.mktTitle, color:"#fff", margin:0 }}>Trusted by tonight&apos;s travelers</h2>
-            <p style={{ fontSize:14, color:"rgba(255,255,255,0.85)", margin:"10px 0 0", lineHeight:1.6 }}>
-              Real hotels, real ratings. Every stay is reviewed, so the next guest knows what to expect.
-            </p>
-          </div>
-          <div style={{ display:"flex", gap:28, flexWrap:"wrap", justifyContent:"center" }}>
-            <div style={SL.trustStat}>
-              <div style={SL.trustStatNum}>{hotelCount}</div>
-              <div style={SL.trustStatLbl}>Partner hotel{hotelCount===1?"":"s"}</div>
-            </div>
-            <div style={SL.trustStat}>
-              <div style={SL.trustStatNum}>{avgRating > 0 ? avgRating.toFixed(1) : "New"}</div>
-              <div style={SL.trustStatLbl}>Average rating</div>
-            </div>
-            <div style={SL.trustStat}>
-              <div style={SL.trustStatNum}>{totalReviews}</div>
-              <div style={SL.trustStatLbl}>Guest review{totalReviews===1?"":"s"}</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Listing grid */}
-      <div style={{ maxWidth:1080, margin:"0 auto", padding:"48px 24px 56px" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:18, gap:12, flexWrap:"wrap" }}>
-          <div>
-            <span style={SL.mktEyebrow}>Available now</span>
-            <h2 style={{ ...SL.mktTitle, fontSize:26, margin:0 }}>Rooms open tonight</h2>
-          </div>
-          <span style={{ fontSize:13, color:"#6B7280" }}>{hotelsWithRooms.length} hotel{hotelsWithRooms.length===1?"":"s"} · New Orleans Area</span>
-        </div>
-
-        {hotelsWithRooms.length === 0 ? (
-          <div style={{ background:"#fff", border:"1px solid #E5E7EB", borderRadius:16, padding:"48px 24px", textAlign:"center", color:"#6B7280" }}>
-            No hotels available right now. Check back tonight.
-          </div>
-        ) : (
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(300px, 1fr))", gap:22 }}>
-            {hotelsWithRooms.map(hotel => {
-              const fromPrice = Math.min(...hotel.rooms.map(r=>r.rack));
-              return (
-                <div key={hotel.id} style={SL.card} onClick={() => onSelectHotel(hotel)}
-                  onMouseEnter={e=>{e.currentTarget.style.boxShadow=elevation.interactiveHover; e.currentTarget.style.transform="translateY(-2px)";}}
-                  onMouseLeave={e=>{e.currentTarget.style.boxShadow=elevation.interactiveResting; e.currentTarget.style.transform="none";}}>
-                  <div style={{ position:"relative" }}>
-                    <img src={hotel.heroImage || HERO_FALLBACK} alt="" loading="lazy"
-                      style={{ width:"100%", height:190, objectFit:"cover", display:"block" }} />
-                    <span style={SL.tonightTag}>{hotel.rooms.length} room{hotel.rooms.length>1?"s":""} left tonight</span>
-                  </div>
-                  <div style={{ padding:"14px 16px 16px" }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10 }}>
-                      <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:16, lineHeight:1.25 }}>{hotel.name}</div>
-                      <div style={{ textAlign:"right", flexShrink:0 }}>
-                        <div style={{ fontSize:11, color:"#9CA3AF" }}>from</div>
-                        <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color:"#0F766E" }}>${fromPrice}</div>
-                      </div>
-                    </div>
-                    <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotel.name + ' ' + hotel.location)}`}
-                      target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
-                      style={{ display:"inline-block", fontSize:13, color:"#6B7280", marginTop:3, textDecoration:"none", cursor:"pointer" }}
-                      onMouseEnter={e=>{ e.currentTarget.style.textDecoration="underline"; }}
-                      onMouseLeave={e=>{ e.currentTarget.style.textDecoration="none"; }}>
-                      {hotel.city || hotel.location}
-                    </a>
-                    <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8 }}>
-                      <StarDisplay rating={hotel.rating} />
-                      <span style={{ fontSize:12, color:"#6B7280" }}>{hotel.rating} ({hotel.reviewCount} reviews)</span>
-                    </div>
-                  </div>
+      {/* ── Section 4: City grid ────────────────────────────────────────── */}
+      <section style={{ background:"#fff", padding:pad }}>
+        <div style={SL.homeLabel}>Where we operate</div>
+        <div style={{ maxWidth:880, margin: isMobile ? "32px auto 0" : "48px auto 0",
+          display:"grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap:22 }}>
+          {CITIES.map(city => (
+            <div key={city.label} style={{ ...SL.cityCard, backgroundImage:`url(${city.image})` }}>
+              <div style={SL.cityOverlay} />
+              <span style={SL.cityTag}>{city.tag}</span>
+              <div style={{ position:"relative" }}>
+                <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20 }}>{city.label}</div>
+                <div style={{ fontSize:14, marginTop:3, color:"rgba(255,255,255,0.85)" }}>
+                  {city.hotelCount} hotel{city.hotelCount === 1 ? "" : "s"}
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p style={{ textAlign:"center", margin: isMobile ? "32px 0 0" : "40px 0 0", fontSize:15, color:SL.sub }}>
+          More cities coming. Know a hotel that should be on LastKey?{" "}
+          <a href={FOR_HOTELS_URL} style={{ color:SL.ink, fontWeight:600 }}>Tell us</a>
+        </p>
+      </section>
+
+      {/* ── Section 5: For hotels strip ─────────────────────────────────── */}
+      <section style={{ background:SL.navy, padding:pad, textAlign:"center" }}>
+        <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize: isMobile ? 19 : 23, color:"#fff" }}>
+          Own a hotel? Put your unsold rooms to work tonight.
+        </div>
+        <a href={FOR_HOTELS_URL}
+          style={{ display:"inline-block", marginTop:16, fontSize:15, fontWeight:600, color:SL.amber, textDecoration:"none", transition:"opacity 0.2s" }}
+          onMouseEnter={e => { e.currentTarget.style.opacity = "0.8"; }}
+          onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}>
+          Learn about partnering with LastKey →
+        </a>
+      </section>
     </div>
   );
 }
@@ -451,7 +389,7 @@ function GuestHeader({ currentGuest, sideTab, selectTab, setScreen, handleSignOu
                 ))}
                 <div style={{ position:"relative" }}>
                   <button style={SL.headerAccountBtn} onClick={() => setAcctOpen(o=>!o)}>
-                    {currentGuest.name || "Account"}
+                    {currentGuest.firstName || (currentGuest.name || "Account").split(" ")[0]}
                   </button>
                   {acctOpen && (
                     <div style={SL.headerDropdown} onMouseLeave={() => setAcctOpen(false)}>
@@ -465,7 +403,7 @@ function GuestHeader({ currentGuest, sideTab, selectTab, setScreen, handleSignOu
             ) : (
               <>
                 <a href="/for-hotels" style={SL.headerLink}>List your property</a>
-                <button style={SL.headerLink} onClick={() => setScreen("login")}>Register</button>
+                <button style={{ ...SL.ghostBtn, padding:"9px 16px", fontSize:13.5 }} onClick={() => setScreen("login")}>Register</button>
                 <button style={SL.headerBtnPrimary} onClick={() => setScreen("login")}>Sign in</button>
               </>
             )}
@@ -504,20 +442,26 @@ function GuestHeader({ currentGuest, sideTab, selectTab, setScreen, handleSignOu
   );
 }
 
-// Persistent footer for guest-facing screens (not /hotel). Stacks on mobile
-// using the same MOBILE_BREAKPOINT as the header.
-function GuestFooter({ isMobile }) {
+// Persistent footer for guest-facing screens (not /hotel). Dark, three columns
+// on desktop, stacked on mobile. onBrowse / onHowItWorks route to the listing
+// screen and smooth-scroll to the matching homepage section.
+function GuestFooter({ isMobile, onBrowse, onHowItWorks }) {
   return (
     <footer style={SL.footerBar}>
-      <div style={{ ...SL.footerInner, flexDirection: isMobile ? "column" : "row" }}>
-        <div style={SL.footerBrand}>
-          <div style={SL.logo}>LK</div>
-          <div>
-            <div style={{ fontWeight:700, fontSize:13, color:SL.ink }}>LastKey</div>
-            <div style={{ fontSize:11, color:SL.faint, marginTop:1 }}>Private rate requests · tonight only</div>
+      <div style={{ ...SL.footerGrid, gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)" }}>
+        <div>
+          <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, color:"#fff" }}>LastKey</div>
+          <div style={{ fontSize:14, color:"#94A3B8", marginTop:10, lineHeight:1.6, maxWidth:280 }}>
+            The private bidding platform for same-night hotel rooms.
           </div>
         </div>
-        <div style={{ ...SL.footerLinks, flexDirection: isMobile ? "column" : "row" }}>
+        <div>
+          <div style={SL.footerHead}>Product</div>
+          <button style={SL.footerLink} onClick={onBrowse}>Browse Hotels</button>
+          <button style={SL.footerLink} onClick={onHowItWorks}>How it works</button>
+        </div>
+        <div>
+          <div style={SL.footerHead}>Legal &amp; Partners</div>
           <a href="/privacy" style={SL.footerLink}>Privacy Policy</a>
           <a href="/terms" style={SL.footerLink}>Terms of Service</a>
           <a href="/hotel" style={SL.footerLink}>Hotel Partner Login</a>
@@ -755,6 +699,13 @@ function GuestView() {
   // Commit a location from the search bar and show the results page.
   function runSearch(loc) { setSearchLocation((loc || "").trim()); setScreen("search"); }
 
+  // Footer links: return to the listing screen, then smooth-scroll to the
+  // requested homepage section once it has rendered.
+  function goSection(id) {
+    setSideTab("browse"); setScreen("listing");
+    setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior:"smooth" }), 60);
+  }
+
   // ── Save / unsave a hotel (optimistic, reverts on failure) ─────────────────
   async function toggleSave(hotel) {
     if (!currentGuest) { setScreen("login"); return; }
@@ -783,7 +734,7 @@ function GuestView() {
     const renderHome = () =>
       homeVariant === "suitely"
         ? <HomeSuitely hotelsWithRooms={displayedHotels} locationCopy={locationCopy} onSearch={runSearch} />
-        : <HotelListingView hotelsWithRooms={displayedHotels} locationCopy={locationCopy} onSearch={runSearch} onSelectHotel={h => { setSelectedHotel(h); setScreen("hotel"); }} />;
+        : <HotelListingView hotelsWithRooms={displayedHotels} onSelectHotel={h => { setSelectedHotel(h); setScreen("hotel"); }} />;
 
     if (screen === "listing") return renderHome();
 
@@ -1052,7 +1003,7 @@ function GuestView() {
           <div style={{ fontSize:12, color:SL.sub, marginBottom:14 }}>📅 Tonight · {stayWindow(getTodayKey())}</div>
           <div style={{ display:"flex", alignItems:"baseline", gap:8, borderBottom:"2px solid #F59E0B", paddingBottom:12, marginBottom:18 }}>
             <span style={{ fontFamily:"Space Grotesk,sans-serif", fontSize:26, fontWeight:700, color:"#F59E0B" }}>$</span>
-            <input type="number" placeholder="0" value={bidAmount} onChange={e=>setBidAmount(e.target.value)} min="1"
+            <input type="number" inputMode="decimal" placeholder="0" value={bidAmount} onChange={e=>setBidAmount(e.target.value)} min="1"
               style={{ flex:1, border:"none", outline:"none", fontFamily:"Space Grotesk,sans-serif", fontSize:isMobile?28:42, fontWeight:700, color:"#1A1F2B", width:"100%", background:"transparent" }} />
             <span style={{ fontSize:13, color:SL.sub, whiteSpace:"nowrap" }}>/ night</span>
           </div>
@@ -1196,7 +1147,7 @@ function GuestView() {
           {declined && (
             <>
               <p style={{ color:SL.faint, maxWidth:340, margin:"14px auto 0", lineHeight:1.6, fontSize:13 }}>
-                Tip: bids closer to the listed rate are more likely to be accepted. Try offering a higher amount or browse other available rooms.
+                Tip: bids within 20% of the listed rate are more likely to be accepted. Consider a higher offer or try another property.
               </p>
               <div style={{ display:"flex", gap:10, maxWidth:340, margin:"22px auto 0" }}>
                 <button style={{ ...SL.primaryBtn, flex:1 }} onClick={() => { setBidAmount(""); setScreen("bid"); }}>
@@ -1428,7 +1379,7 @@ function GuestView() {
           </a>
           <button style={{ ...SL.ghostBtn, marginTop:12 }} onClick={handleSignOut}>Sign out</button>
         </div>
-        <GuestFooter isMobile={isMobile} />
+        <GuestFooter isMobile={isMobile} onBrowse={() => goSection("available-now")} onHowItWorks={() => goSection("how-it-works")} />
       </div>
     );
   }
@@ -1458,9 +1409,8 @@ function GuestView() {
 
       <div style={SL.content}>
         {showPanel ? renderSideContent() : renderMain()}
+        <GuestFooter isMobile={isMobile} onBrowse={() => goSection("available-now")} onHowItWorks={() => goSection("how-it-works")} />
       </div>
-
-      <GuestFooter isMobile={isMobile} />
     </div>
   );
 }
