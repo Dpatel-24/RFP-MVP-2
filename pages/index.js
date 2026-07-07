@@ -494,6 +494,7 @@ function GuestView() {
   const [savedHotelIds, setSavedHotelIds] = useState(new Set()); // hotel_ids the guest has saved
   const [hotelAccount, setHotelAccount]   = useState(null); // set when the signed-in user owns a hotel
   const timerRef = useRef(null);
+  const contentRef = useRef(null); // scrollable main area — reset on screen change
   const bootedUid = useRef(undefined); // last user id we booted for — dedupes token-refresh/focus re-fires
 
   // [HOME-V2 DRAFT] resolve which homepage to show: ?home=v2 / ?home=v1
@@ -622,6 +623,14 @@ function GuestView() {
     timerRef.current = setInterval(tick, 1000);
     return () => clearInterval(timerRef.current);
   }, [screen, activeBid]);
+
+  // ── Reset scroll when the screen/tab changes ────────────────────────────────
+  // All guest screens render inside one scrollable container, so without this
+  // a new screen inherits the previous screen's scroll position (e.g. opening
+  // a hotel from the scrolled-down homepage landed mid-page).
+  useEffect(() => {
+    contentRef.current?.scrollTo(0, 0);
+  }, [screen, sideTab]);
 
   // ── Always-on 1s ticker for live-request countdowns ────────────────────────
   useEffect(() => {
@@ -1407,7 +1416,7 @@ function GuestView() {
         isMobile={isMobile}
       />
 
-      <div style={SL.content}>
+      <div ref={contentRef} style={SL.content}>
         {showPanel ? renderSideContent() : renderMain()}
         <GuestFooter isMobile={isMobile} onBrowse={() => goSection("available-now")} onHowItWorks={() => goSection("how-it-works")} />
       </div>
