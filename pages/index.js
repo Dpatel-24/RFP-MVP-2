@@ -8,7 +8,7 @@ import {
   TimerRing, ImageOrIcon, Badge, StarDisplay, GuestProfileCard, PasswordLogin,
   BookingCalendar, SL,
 } from "../lib/components";
-import { elevation, radius } from "../lib/tokens";
+import { elevation, radius, color } from "../lib/tokens";
 import { GoogleReviews } from "../lib/GoogleReviews"; // [GOOGLE-REVIEWS TEST]
 import { HomeSuitely } from "../lib/HomeSuitely"; // [HOME-V2 DRAFT]
 import { HotelCard } from "../components/HotelCard";
@@ -105,7 +105,7 @@ function GuestProfileForm({ guest, onSaved, onSignOut }) {
       </div>
       <div style={{ marginBottom:14 }}>
         <label style={label}>Email address</label>
-        <input style={{ ...SL.field, background:"#F3F4F6", color:SL.sub }} value={guest.email || ""} readOnly />
+        <input style={{ ...SL.field, background:color.surfaceAlt, color:SL.sub }} value={guest.email || ""} readOnly />
         <div style={{ fontSize:11, color:SL.faint, marginTop:5 }}>Email is tied to your login and can't be changed here.</div>
       </div>
       <div style={{ marginBottom:20 }}>
@@ -117,7 +117,7 @@ function GuestProfileForm({ guest, onSaved, onSignOut }) {
         <button style={{ ...SL.primaryBtn, width:"auto", padding:"12px 22px", opacity:busy?0.5:1 }} disabled={busy} onClick={save}>
           {busy ? "Saving…" : "Save changes"}
         </button>
-        {saved && <span style={{ fontSize:13, color:"#059669", fontWeight:600 }}>✓ Saved</span>}
+        {saved && <span style={{ fontSize:13, color:color.success, fontWeight:600 }}>✓ Saved</span>}
       </div>
 
       <div style={{ borderTop:`1px solid ${SL.line}`, marginTop:22, paddingTop:18 }}>
@@ -161,7 +161,7 @@ function LocationField({ value, setValue, options, style }) {
             <button key={o} type="button"
               onMouseDown={e => { e.preventDefault(); setValue(o); setOpen(false); }}
               style={SL.typeaheadItem}
-              onMouseEnter={e => { e.currentTarget.style.background = "#F9FAFB"; }}
+              onMouseEnter={e => { e.currentTarget.style.background = color.surfaceAlt; }}
               onMouseLeave={e => { e.currentTarget.style.background = "none"; }}>
               {o}
             </button>
@@ -185,7 +185,7 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms }) {
   ];
 
   return (
-    <div style={{ background:"#fff", color:SL.ink, fontFamily:"Inter,sans-serif" }}>
+    <div style={{ background:color.surface, color:SL.ink, fontFamily:"Inter,sans-serif" }}>
       {/* ── Section 1: Hero ─────────────────────────────────────────────── */}
       <section style={{ ...SL.heroWrap, backgroundImage:`url(${HERO_IMAGE_URL})` }}>
         <div style={SL.heroOverlay} />
@@ -203,7 +203,7 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms }) {
       </section>
 
       {/* ── Section 2: How it works ─────────────────────────────────────── */}
-      <section id="how-it-works" style={{ background:"#fff", padding:pad }}>
+      <section id="how-it-works" style={{ background:color.surface, padding:pad }}>
         <div style={SL.homeLabel}>How it works</div>
         <div style={{ maxWidth:1000, margin: isMobile ? "36px auto 0" : "56px auto 0",
           display:"flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 40 : 56 }}>
@@ -218,7 +218,7 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms }) {
       </section>
 
       {/* ── Section 3: Available now ────────────────────────────────────── */}
-      <section id="available-now" style={{ background:"#F4F5F7", padding:pad }}>
+      <section id="available-now" style={{ background:color.surfaceAlt, padding:pad }}>
         <div style={SL.homeLabel}>
           {GEOLOCATION_ENABLED ? "Available tonight near you" : `Available tonight in ${PILOT_CITY_LABEL}`}
         </div>
@@ -236,7 +236,7 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms }) {
       </section>
 
       {/* ── Section 4: City grid ────────────────────────────────────────── */}
-      <section style={{ background:"#fff", padding:pad }}>
+      <section style={{ background:color.surface, padding:pad }}>
         <div style={SL.homeLabel}>Where we operate</div>
         <div style={{ maxWidth:880, margin: isMobile ? "32px auto 0" : "48px auto 0",
           display:"grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap:22 }}>
@@ -261,7 +261,7 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms }) {
 
       {/* ── Section 5: For hotels strip ─────────────────────────────────── */}
       <section style={{ background:SL.navy, padding:pad, textAlign:"center" }}>
-        <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize: isMobile ? 19 : 23, color:"#fff" }}>
+        <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize: isMobile ? 19 : 23, color:color.surface }}>
           Own a hotel? Put your unsold rooms to work tonight.
         </div>
         <a href={FOR_HOTELS_URL}
@@ -288,7 +288,7 @@ function SearchResultsView({ hotelsWithRooms, searchLocation, onSelectHotel, onB
     : hotelsWithRooms;
 
   return (
-    <div style={{ background:"#F4F5F7", minHeight:"100%" }}>
+    <div style={{ background:color.surfaceAlt, minHeight:"100%" }}>
       <div style={{ maxWidth:980, margin:"0 auto", padding:"26px 24px 56px" }}>
         <button style={SL.backBtn} onClick={onBack}>← All hotels</button>
 
@@ -301,12 +301,12 @@ function SearchResultsView({ hotelsWithRooms, searchLocation, onSelectHotel, onB
         <h1 style={{ ...SL.h1, fontSize:24, marginBottom:4 }}>
           {searchLocation ? `Hotels in ${searchLocation}` : "All hotels"}
         </h1>
-        <div style={{ fontSize:13, color:"#6B7280", marginBottom:20 }}>
+        <div style={{ fontSize:13, color:color.muted, marginBottom:20 }}>
           {results.length} hotel{results.length === 1 ? "" : "s"} available tonight
         </div>
 
         {results.length === 0 ? (
-          <div style={{ ...SL.panel, padding:"48px 24px", textAlign:"center", color:"#6B7280", fontSize:14 }}>
+          <div style={{ ...SL.panel, padding:"48px 24px", textAlign:"center", color:color.muted, fontSize:14 }}>
             No hotels match “{searchLocation}”. Try another city or area.
           </div>
         ) : (
@@ -326,20 +326,20 @@ function SearchResultsView({ hotelsWithRooms, searchLocation, onSelectHotel, onB
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
                       <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, lineHeight:1.25 }}>{hotel.name}</div>
                       <div style={{ textAlign:"right", flexShrink:0 }}>
-                        <div style={{ fontSize:11, color:"#9CA3AF" }}>from</div>
-                        <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:22, color:"#0F766E" }}>${fromPrice}</div>
+                        <div style={{ fontSize:11, color:color.faint }}>from</div>
+                        <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:22, color:color.price }}>${fromPrice}</div>
                       </div>
                     </div>
                     <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotel.name + ' ' + hotel.location)}`}
                       target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
-                      style={{ display:"inline-block", fontSize:13, color:"#6B7280", marginTop:4, textDecoration:"none", cursor:"pointer" }}
+                      style={{ display:"inline-block", fontSize:13, color:color.muted, marginTop:4, textDecoration:"none", cursor:"pointer" }}
                       onMouseEnter={e=>{ e.currentTarget.style.textDecoration="underline"; }}
                       onMouseLeave={e=>{ e.currentTarget.style.textDecoration="none"; }}>
                       {hotel.city || hotel.location}
                     </a>
                     <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8 }}>
                       <StarDisplay rating={hotel.rating} />
-                      <span style={{ fontSize:12, color:"#6B7280" }}>{hotel.rating} ({hotel.reviewCount} reviews)</span>
+                      <span style={{ fontSize:12, color:color.muted }}>{hotel.rating} ({hotel.reviewCount} reviews)</span>
                     </div>
                     <div style={{ marginTop:"auto", paddingTop:14 }}>
                       <span style={{ ...SL.headerBtnPrimary, display:"inline-block", padding:"9px 16px", fontSize:13 }}>View rooms →</span>
@@ -420,7 +420,7 @@ function GuestHeader({ currentGuest, sideTab, selectTab, setScreen, handleSignOu
           {currentGuest ? (
             <>
               {navTabs.map(t => (
-                <button key={t.id} style={{ ...SL.mobileMenuItem, color: sideTab===t.id ? "#B45309" : "#374151" }} onClick={() => go(t.id)}>
+                <button key={t.id} style={{ ...SL.mobileMenuItem, color: sideTab===t.id ? color.brandText : color.ink }} onClick={() => go(t.id)}>
                   {t.label}{t.count > 0 ? ` (${t.count})` : ""}
                 </button>
               ))}
@@ -450,8 +450,8 @@ function GuestFooter({ isMobile, onBrowse, onHowItWorks }) {
     <footer style={SL.footerBar}>
       <div style={{ ...SL.footerGrid, gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)" }}>
         <div>
-          <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, color:"#fff" }}>LastKey</div>
-          <div style={{ fontSize:14, color:"#94A3B8", marginTop:10, lineHeight:1.6, maxWidth:280 }}>
+          <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, color:color.surface }}>LastKey</div>
+          <div style={{ fontSize:14, color:color.onDarkMuted, marginTop:10, lineHeight:1.6, maxWidth:280 }}>
             The private bidding platform for same-night hotel rooms.
           </div>
         </div>
@@ -794,7 +794,7 @@ function GuestView() {
           <div style={{ display:"flex", gap:8 }}>
             <span style={{ ...SL.ghostBtn, opacity:0.6 }}>↗ Share</span>
             <button
-              style={{ ...SL.ghostBtn, cursor:"pointer", color: savedHotelIds.has(selectedHotel.id) ? "#B45309" : "#374151", borderColor: savedHotelIds.has(selectedHotel.id) ? "#FCD34D" : "#D1D5DB" }}
+              style={{ ...SL.ghostBtn, cursor:"pointer", color: savedHotelIds.has(selectedHotel.id) ? color.brandText : color.ink, borderColor: savedHotelIds.has(selectedHotel.id) ? color.brand : color.line }}
               onClick={() => toggleSave(selectedHotel)}>
               {savedHotelIds.has(selectedHotel.id) ? "♥ Saved" : "♡ Save"}
             </button>
@@ -810,7 +810,7 @@ function GuestView() {
             <div key={i} style={{ position:"relative" }}>
               <img src={u} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
               {i===galleryThumbs.length-1 && selectedHotel.rooms.length>galleryThumbs.length && (
-                <div style={{ position:"absolute", inset:0, background:"rgba(15,23,42,0.5)", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:13 }}>+{selectedHotel.rooms.length-galleryThumbs.length} More</div>
+                <div style={{ position:"absolute", inset:0, background:"rgba(15,23,42,0.5)", color:color.surface, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:13 }}>+{selectedHotel.rooms.length-galleryThumbs.length} More</div>
               )}
             </div>
           ))}
@@ -844,8 +844,8 @@ function GuestView() {
             {/* Rooms */}
             <div style={SL.sectionLabel}>Available Tonight</div>
             {pendingHere && (
-              <div style={{ ...SL.panel, padding:"12px 14px", marginBottom:14, background:"#FFFBEB", borderColor:"#FCD34D", display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-                <div style={{ fontSize:13, color:"#92400E" }}>
+              <div style={{ ...SL.panel, padding:"12px 14px", marginBottom:14, background:color.brandSoft, borderColor:color.brand, display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+                <div style={{ fontSize:13, color:color.brandText }}>
                   You already have a {effectiveStatus(pendingHere) === "countered" ? "counter offer" : "pending request"} at this hotel — only one at a time.
                 </div>
                 <button style={{ ...SL.ghostBtn, padding:"7px 12px", fontSize:12 }} onClick={()=>setSideTab("live")}>View Live Requests</button>
@@ -874,7 +874,7 @@ function GuestView() {
                       <span style={{ fontSize:14, color:SL.sub, textDecoration:"line-through" }}>${room.rack}</span>
                     </div>
                     {blocked
-                      ? <button style={{ ...SL.primaryBtn, background:"#E5E7EB", color:"#9CA3AF", cursor:"not-allowed" }} disabled>
+                      ? <button style={{ ...SL.primaryBtn, background:color.line, color:color.faint, cursor:"not-allowed" }} disabled>
                           {isPendingRoom ? "Request in progress" : "Request locked — 1 per hotel"}
                         </button>
                       : <button style={SL.primaryBtn} onClick={() => { setSelectedRoom(room); setScreen("bid"); }}>Request a Rate →</button>
@@ -900,7 +900,7 @@ function GuestView() {
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(180px,1fr))", gap:10 }}>
                   {allAmenities.map(a => (
                     <div key={a} style={{ display:"flex", alignItems:"center", gap:8, fontSize:14 }}>
-                      <span style={{ color:"#059669" }}>✓</span>{a}
+                      <span style={{ color:color.success }}>✓</span>{a}
                     </div>
                   ))}
                 </div>
@@ -933,7 +933,7 @@ function GuestView() {
                       <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:SL.sub, marginBottom:4 }}>
                         <span>{cat}</span><span>{selectedHotel.rating > 0 ? selectedHotel.rating.toFixed(1) : "—"}</span>
                       </div>
-                      <div style={{ height:6, borderRadius:4, background:"#EEF0F3", overflow:"hidden" }}>
+                      <div style={{ height:6, borderRadius:4, background:color.surfaceAlt, overflow:"hidden" }}>
                         <div style={{ width:`${selectedHotel.rating>0 ? (selectedHotel.rating/5)*100 : 0}%`, height:"100%", background:SL.amber }} />
                       </div>
                     </div>
@@ -983,7 +983,7 @@ function GuestView() {
               <div style={{ fontSize:11, color:SL.faint, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginBottom:12 }}>How it works</div>
               {[["1","Name your rate","Offer what you'd pay tonight."],["2","Fast answer","Accept, decline or counter in ~10 min."],["3","Show your code","Give the confirmation code at check-in."]].map(([n,t,d]) => (
                 <div key={n} style={{ display:"flex", gap:10, marginBottom:12 }}>
-                  <div style={{ width:24, height:24, borderRadius:"50%", background:"#FEF3E2", color:"#B45309", fontWeight:700, fontSize:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{n}</div>
+                  <div style={{ width:24, height:24, borderRadius:"50%", background:color.brandSoft, color:color.brandText, fontWeight:700, fontSize:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{n}</div>
                   <div>
                     <div style={{ fontSize:13, fontWeight:700 }}>{t}</div>
                     <div style={{ fontSize:12, color:SL.sub }}>{d}</div>
@@ -1024,14 +1024,14 @@ function GuestView() {
           <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, marginBottom:6 }}>Your Rate Request</div>
           <div style={{ fontSize:13, color:SL.sub, marginBottom:8, lineHeight:1.55 }}>Rack rate is ${selectedRoom.rack}. The hotel will respond within 10 minutes.</div>
           <div style={{ fontSize:12, color:SL.sub, marginBottom:14 }}>📅 Tonight · {stayWindow(getTodayKey())}</div>
-          <div style={{ display:"flex", alignItems:"baseline", gap:8, borderBottom:"2px solid #F59E0B", paddingBottom:12, marginBottom:18 }}>
-            <span style={{ fontFamily:"Space Grotesk,sans-serif", fontSize:26, fontWeight:700, color:"#F59E0B" }}>$</span>
+          <div style={{ display:"flex", alignItems:"baseline", gap:8, borderBottom:`2px solid ${color.brand}`, paddingBottom:12, marginBottom:18 }}>
+            <span style={{ fontFamily:"Space Grotesk,sans-serif", fontSize:26, fontWeight:700, color:color.brand }}>$</span>
             <input type="number" inputMode="decimal" placeholder="0" value={bidAmount} onChange={e=>setBidAmount(e.target.value)} min="1"
-              style={{ flex:1, border:"none", outline:"none", fontFamily:"Space Grotesk,sans-serif", fontSize:isMobile?28:42, fontWeight:700, color:"#1A1F2B", width:"100%", background:"transparent" }} />
+              style={{ flex:1, border:"none", outline:"none", fontFamily:"Space Grotesk,sans-serif", fontSize:isMobile?28:42, fontWeight:700, color:color.ink, width:"100%", background:"transparent" }} />
             <span style={{ fontSize:13, color:SL.sub, whiteSpace:"nowrap" }}>/ night</span>
           </div>
           {!currentGuest && (
-            <div style={{ padding:"10px 14px", background:"#FEF3E2", borderRadius:8, fontSize:13, color:"#B45309", marginBottom:14 }}>
+            <div style={{ padding:"10px 14px", background:color.brandSoft, borderRadius:8, fontSize:13, color:color.brandText, marginBottom:14 }}>
               Sign in to submit a bid. Hotels will see your rating — nothing else.
             </div>
           )}
@@ -1128,7 +1128,7 @@ function GuestView() {
           {[["Room", activeBid?.room?.name], ["Stay", stayWindow(activeBid?.stayDate || getTodayKey())], ["Your bid","$"+activeBid?.amount], ["Ref", activeBid?.id?.slice(0,8)]].map(([l,v]) => (
             <div key={l} style={{ display:"flex", justifyContent:"space-between", gap:12, padding:"6px 0", fontSize:14, borderBottom:`1px solid ${SL.line}` }}>
               <span style={{ color:SL.sub }}>{l}</span>
-              <span style={{ color:l==="Your bid"?"#B45309":SL.ink, fontWeight:l==="Your bid"?700:400, fontFamily:l==="Ref"?"monospace":"inherit", fontSize:l==="Ref"?12:14, textAlign:"right" }}>{v}</span>
+              <span style={{ color:l==="Your bid"?color.brandText:SL.ink, fontWeight:l==="Your bid"?700:400, fontFamily:l==="Ref"?"monospace":"inherit", fontSize:l==="Ref"?12:14, textAlign:"right" }}>{v}</span>
             </div>
           ))}
         </div>
@@ -1145,16 +1145,16 @@ function GuestView() {
           <p style={{ color:SL.sub, maxWidth:320, margin:"0 auto 20px", lineHeight:1.6 }}>
             {bid?.hotel?.name} can't do ${bid?.amount}, but they're offering a counter rate.
           </p>
-          <div style={{ ...SL.panel, border:"2px solid #A78BFA", padding:"24px", maxWidth:320, margin:"0 auto 20px" }}>
+          <div style={{ ...SL.panel, border:`2px solid ${color.counter}`, padding:"24px", maxWidth:320, margin:"0 auto 20px" }}>
             <div style={{ fontSize:12, color:SL.sub, marginBottom:4 }}>Counter rate offered</div>
-            <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:52, color:"#7C3AED", lineHeight:1 }}>${bid?.counterAmount}</div>
+            <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:52, color:color.counter, lineHeight:1 }}>${bid?.counterAmount}</div>
             <div style={{ fontSize:12, color:SL.faint, marginTop:6 }}>vs your bid of ${bid?.amount} · rack ${bid?.room?.rack}</div>
             <div style={{ display:"flex", justifyContent:"center", marginTop:18 }}><TimerRing seconds={counterTimeLeft} total={COUNTER_TIMER} size={90} /></div>
             <div style={{ fontSize:12, color:SL.faint, marginTop:8 }}>Respond before time runs out</div>
           </div>
           <div style={{ display:"flex", gap:10, maxWidth:320, margin:"0 auto" }}>
-            <button style={{ ...SL.primaryBtn, flex:1, background:"#7C3AED", color:"#fff" }} onClick={handleAcceptCounter}>Accept ${bid?.counterAmount}</button>
-            <button style={{ ...SL.primaryBtn, flex:1, background:"#fff", color:"#374151", border:"1px solid #D1D5DB" }} onClick={handleDeclineCounter}>Decline</button>
+            <button style={{ ...SL.primaryBtn, flex:1, background:color.counter, color:color.surface }} onClick={handleAcceptCounter}>Accept ${bid?.counterAmount}</button>
+            <button style={{ ...SL.primaryBtn, flex:1, background:color.surface, color:color.ink, border:`1px solid ${color.line}` }} onClick={handleDeclineCounter}>Decline</button>
           </div>
         </div>
       );
@@ -1168,10 +1168,10 @@ function GuestView() {
       const declined = status === "declined";
       return (
         <div style={{ ...wrap, maxWidth:560, textAlign:"center", paddingTop:48 }}>
-          <div style={{ width:72, height:72, borderRadius:"50%", background:"#F3F4F6", display:"flex", alignItems:"center", justifyContent:"center", fontSize:30, margin:"0 auto" }}>
+          <div style={{ width:72, height:72, borderRadius:"50%", background:color.surfaceAlt, display:"flex", alignItems:"center", justifyContent:"center", fontSize:30, margin:"0 auto" }}>
             {accepted?"✓":expired?"⏱":"✕"}
           </div>
-          <h2 style={{ ...SL.h1, fontSize:26, marginTop:18, color:accepted?"#059669":expired?"#6B7280":"#DC2626" }}>
+          <h2 style={{ ...SL.h1, fontSize:26, marginTop:18, color:accepted?color.success:expired?color.muted:color.danger }}>
             {accepted?"You're in.":expired?"Time's up.":"Not this time."}
           </h2>
           <p style={{ color:SL.sub, maxWidth:340, margin:"10px auto 0", lineHeight:1.7 }}>
@@ -1181,9 +1181,9 @@ function GuestView() {
               : "The hotel couldn't accept this rate. Try a different amount or room."}
           </p>
           {accepted && bid?.confirmationCode && (
-            <div style={{ maxWidth:320, margin:"22px auto 0", background:"#ECFDF5", border:"1px solid #A7F3D0", borderRadius:12, padding:"16px 20px" }}>
-              <div style={{ fontSize:11, color:"#059669", letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:6, fontWeight:700 }}>Confirmation Code</div>
-              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:30, color:"#047857", letterSpacing:"0.15em" }}>{bid.confirmationCode}</div>
+            <div style={{ maxWidth:320, margin:"22px auto 0", background:color.successSoft, border:`1px solid ${color.successSoft}`, borderRadius:12, padding:"16px 20px" }}>
+              <div style={{ fontSize:11, color:color.success, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:6, fontWeight:700 }}>Confirmation Code</div>
+              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:30, color:color.success, letterSpacing:"0.15em" }}>{bid.confirmationCode}</div>
             </div>
           )}
           {declined && (
@@ -1251,7 +1251,7 @@ function GuestView() {
                   <div style={{ marginTop:8 }}><Badge status={effectiveStatus(b)} /></div>
                 </div>
                 <div style={{ textAlign:"right", flexShrink:0 }}>
-                  <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color: b.status==="countered"?"#7C3AED":"#B45309" }}>${rate}</div>
+                  <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:20, color: b.status==="countered"?color.counter:color.brandText }}>${rate}</div>
                   <div style={{ fontSize:11, color:SL.faint, marginTop:2, letterSpacing:"0.04em", textTransform:"uppercase" }}>{b.status==="countered" ? "counter" : "your rate"}</div>
                 </div>
               </div>
@@ -1269,13 +1269,13 @@ function GuestView() {
               {/* Actions */}
               <div style={{ display:"flex", gap:8, marginTop:14 }}>
                 {b.status === "countered" && (
-                  <button style={{ ...SL.primaryBtn, flex:1, padding:"11px 0", fontSize:13, background:"#7C3AED", color:"#fff" }}
+                  <button style={{ ...SL.primaryBtn, flex:1, padding:"11px 0", fontSize:13, background:color.counter, color:color.surface }}
                     onClick={()=>{ setActiveBid(b); setSelectedHotel(b.hotel); setSelectedRoom(b.room); setCTL(secondsLeft(b)); setSideTab("browse"); setScreen("counter"); }}>
                     View Counter Offer →
                   </button>
                 )}
                 {b.status === "pending" && (
-                  <button style={{ ...SL.ghostBtn, flex:1, padding:"11px 0", fontSize:13, color:"#B91C1C", borderColor:"#FCA5A5" }}
+                  <button style={{ ...SL.ghostBtn, flex:1, padding:"11px 0", fontSize:13, color:color.danger, borderColor:color.danger }}
                     onClick={()=>handleCancel(b.id)}>
                     Cancel Request
                   </button>
@@ -1301,10 +1301,10 @@ function GuestView() {
           <h1 style={{ ...SL.h1, marginBottom:18 }}>History</h1>
 
           {/* Savings KPI */}
-          <div style={{ ...SL.panel, border:"none", background:"linear-gradient(120deg,#0F766E 0%,#115E59 100%)", padding:"18px 20px", marginBottom:18, display:"flex", flexWrap:"wrap", gap:18, alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ ...SL.panel, border:"none", background:`linear-gradient(120deg,${color.price} 0%,${color.price} 100%)`, padding:"18px 20px", marginBottom:18, display:"flex", flexWrap:"wrap", gap:18, alignItems:"center", justifyContent:"space-between" }}>
             <div>
               <div style={{ fontSize:11, color:"rgba(255,255,255,0.8)", textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700 }}>Total saved vs rack rate</div>
-              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:34, color:"#fff", lineHeight:1.1, marginTop:4 }}>${totalSaved}</div>
+              <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:34, color:color.surface, lineHeight:1.1, marginTop:4 }}>${totalSaved}</div>
               <div style={{ fontSize:13, color:"rgba(255,255,255,0.85)", marginTop:4 }}>
                 {stayBids.length === 0
                   ? "No confirmed stays yet — your savings will show here."
@@ -1314,7 +1314,7 @@ function GuestView() {
             {stayBids.length > 0 && (
               <div style={{ display:"flex", gap:24, flexWrap:"wrap" }}>
                 <div style={{ textAlign:"center" }}>
-                  <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:22, color:"#fff" }}>${totalPaid}</div>
+                  <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:22, color:color.surface }}>${totalPaid}</div>
                   <div style={{ fontSize:12, color:"rgba(255,255,255,0.8)", marginTop:2 }}>You paid</div>
                 </div>
                 <div style={{ textAlign:"center" }}>
@@ -1339,14 +1339,14 @@ function GuestView() {
                         <div style={{ fontSize:12, color:SL.sub, marginTop:2 }}>{b.hotel.name}</div>
                         <div style={{ fontSize:12, color:SL.sub, marginTop:6 }}>Check-in: {shortDate(b.stayDate)} · Checkout 11:00 AM next day</div>
                         {["accepted","handled"].includes(b.status) && b.confirmationCode && (
-                          <div style={{ fontSize:12, marginTop:4, color:"#047857" }}>Confirmation: <strong style={{ fontFamily:"monospace" }}>{b.confirmationCode}</strong></div>
+                          <div style={{ fontSize:12, marginTop:4, color:color.success }}>Confirmation: <strong style={{ fontFamily:"monospace" }}>{b.confirmationCode}</strong></div>
                         )}
                       </div>
                       <div style={{ textAlign:"right" }}>
                         <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18 }}>${b.counterAmount ?? b.amount}</div>
                         <div style={{ marginTop:6 }}><Badge status={st} /></div>
                         {b.status === "countered" && (
-                          <button style={{ ...SL.primaryBtn, marginTop:8, padding:"8px 12px", fontSize:12, background:"#7C3AED", color:"#fff" }}
+                          <button style={{ ...SL.primaryBtn, marginTop:8, padding:"8px 12px", fontSize:12, background:color.counter, color:color.surface }}
                             onClick={()=>{ setActiveBid(b); setSelectedHotel(b.hotel); setSelectedRoom(b.room); setCTL(secondsLeft(b)); setSideTab("browse"); setScreen("counter"); }}>
                             View Counter →
                           </button>
@@ -1429,11 +1429,11 @@ function GuestView() {
   return (
     <div style={SL.page}>
       {counterToast && (
-        <div style={{ ...SL.toast, borderColor:"#A78BFA" }}>
-          <span style={{ ...SL.toastDot, background:"#A78BFA" }} />
+        <div style={{ ...SL.toast, borderColor:color.counter }}>
+          <span style={{ ...SL.toastDot, background:color.counter }} />
           <div>
-            <div style={{ fontWeight:700, fontSize:14, color:"#1A1F2B" }}>Counter Offer Received</div>
-            <div style={{ fontSize:12, color:"#6B7280", marginTop:2 }}>The hotel sent a counter rate. Check Live Requests.</div>
+            <div style={{ fontWeight:700, fontSize:14, color:color.ink }}>Counter Offer Received</div>
+            <div style={{ fontSize:12, color:color.muted, marginTop:2 }}>The hotel sent a counter rate. Check Live Requests.</div>
           </div>
         </div>
       )}
