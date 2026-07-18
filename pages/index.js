@@ -682,17 +682,23 @@ function GuestView() {
   }
 
   async function handleAcceptCounter() {
-    try { await api.acceptCounter(activeBid.id); } catch (e) { console.error(e); }
-    refreshBids();
-    setActiveBid(p => ({ ...p, status:"accepted", amount: p.counterAmount }));
-    setScreen("result");
+    // Only show the accepted result if the write actually persisted — otherwise
+    // the guest would see "You're in" for a stay that never saved.
+    try {
+      await api.acceptCounter(activeBid.id);
+      setActiveBid(p => ({ ...p, status:"accepted", amount: p.counterAmount }));
+      setScreen("result");
+      refreshBids();
+    } catch (e) { console.error(e); alert("Could not accept the counter offer. Please try again."); }
   }
 
   async function handleDeclineCounter() {
-    try { await api.declineCounter(activeBid.id); } catch (e) { console.error(e); }
-    refreshBids();
-    setActiveBid(p => ({ ...p, status:"declined" }));
-    setScreen("result");
+    try {
+      await api.declineCounter(activeBid.id);
+      setActiveBid(p => ({ ...p, status:"declined" }));
+      setScreen("result");
+      refreshBids();
+    } catch (e) { console.error(e); alert("Could not decline the counter offer. Please try again."); }
   }
 
   async function handleSignOut() {
