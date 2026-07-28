@@ -4,10 +4,11 @@
 import { useState } from "react";
 import Head from "next/head";
 import { useWindowWidth, MOBILE_BREAKPOINT, SL } from "../lib/components";
+import { RESPONSE_LABEL } from "../lib/api";
 
 const STEPS = [
   ["1", "A guest names a price", "Guests browsing tonight's inventory send you a private offer on a specific room. It never appears on any public channel."],
-  ["2", "You answer in 10 minutes", "Accept, counter, or decline from your dashboard. Your published rates never move; every response is a one-to-one decision."],
+  ["2", `You answer in ${RESPONSE_LABEL}`, "Accept, counter, or decline from your dashboard. Your published rates never move; every response is a one-to-one decision."],
   ["3", "Guest pays you at check-in", "An accepted offer produces a confirmation code. The guest pays you directly at the desk — LastKey never touches the payment."],
 ];
 

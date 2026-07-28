@@ -192,10 +192,26 @@ function HotelDashboard() {
 
   async function onDecide(id, status) {
     try { await api.hotelDecide(id, status); refreshBids(); if (status === "accepted") reloadRooms(); }
-    catch (e) { console.error(e); alert("Action failed."); }
+    // Surface the server's message (e.g. the response window lapsed) instead of
+    // a generic failure — the guard lives in trg_enforce_response_window.
+    catch (e) { console.error(e); alert(e?.message || "Action failed."); refreshBids(); }
   }
+
+  // Accepting is always permitted, but overselling requires an explicit
+  // acknowledgement: inventory is the hotel's to manage, not ours to block.
+  async function onAccept(bid, group) {
+    if (group.inventory === 0) {
+      const ok = typeof window === "undefined" || window.confirm(
+        `${group.roomName} shows 0 rooms left. Accepting this $${bid.amount} bid will oversell it.\n\nAccept anyway?`
+      );
+      if (!ok) return;
+    }
+    await onDecide(bid.id, "accepted");
+  }
+
   async function onCounter(id, amount) {
-    try { await api.hotelCounter(id, amount); refreshBids(); } catch (e) { console.error(e); alert("Counter failed."); }
+    try { await api.hotelCounter(id, amount); refreshBids(); }
+    catch (e) { console.error(e); alert(e?.message || "Counter failed."); refreshBids(); }
   }
   async function onSetFloor(roomId) {
     const v = parseInt(floorInputs[roomId]);
@@ -270,6 +286,34 @@ function HotelDashboard() {
   const dayBids = bids.filter(b => b.stayDate === selectedDate);
 
   const liveBids = bids.filter(b => effectiveStatus(b) === "pending");
+
+  // Group live bids by room so competing offers on the same room sit together
+  // and the highest is obvious. Rooms are already in state — join in memory.
+  const bidGroups = Object.values(
+    liveBids.reduce((acc, b) => {
+      const id = b.room?.id || "unknown";
+      if (!acc[id]) {
+        const room = rooms.find(r => r.id === id);
+        acc[id] = {
+          roomId: id,
+          roomName: b.room?.name || "Room",
+          roomType: b.room?.type || "",
+          inventory: room?.inventoryCount ?? 0,
+          floor: room?.floor_price,
+          bids: [],
+        };
+      }
+      acc[id].bids.push(b);
+      return acc;
+    }, {})
+  )
+    .map(g => ({ ...g, bids: g.bids.sort((a, b) => b.amount - a.amount) }))
+    // Sold-out rooms first (they need a decision), then most contested.
+    .sort((a, b) => (b.inventory === 0) - (a.inventory === 0) || b.bids.length - a.bids.length);
+
+  // Rooms that are sold out but still receiving bids — the hotel needs to know.
+  const soldOutWithBids = bidGroups.filter(g => g.inventory === 0);
+
   const accepted = bids.filter(b => ["accepted","handled"].includes(b.status));
   // "Tonight" stats are scoped to the current 6 AM-boundary booking day.
   const todayKey = getTodayKey();
@@ -382,13 +426,49 @@ function HotelDashboard() {
               <h2 style={SL.dashTitle}>Live Requests</h2>
               <span style={{ color:color.muted, fontSize:14 }}>Accept, decline, or send a counter offer. Bids below your floor auto-decline before they reach you.</span>
             </div>
+
+            {/* Sold-out notification: rooms at 0 inventory that are still
+                receiving bids. The hotel decides whether to oversell. */}
+            {soldOutWithBids.length > 0 && (
+              <div style={{ background:color.dangerSoft, border:`1px solid ${color.danger}`, borderRadius:10, padding:"12px 16px", marginBottom:18 }}>
+                <div style={{ fontWeight:700, fontSize:14, color:color.danger, marginBottom:4 }}>
+                  Inventory is at zero on {soldOutWithBids.length} room type{soldOutWithBids.length === 1 ? "" : "s"} with open bids
+                </div>
+                <div style={{ fontSize:13, color:color.ink, lineHeight:1.6 }}>
+                  {soldOutWithBids.map(g => `${g.roomName} (${g.bids.length} bid${g.bids.length === 1 ? "" : "s"})`).join(", ")}
+                  {" — "}accepting will oversell. Update inventory in Room Settings, or accept the bid you want anyway.
+                </div>
+              </div>
+            )}
             {liveBids.length === 0
               ? <div style={SL.emptyState}>
                   <div style={{ fontSize:34, marginBottom:12 }}>⏳</div>
                   <div style={{ fontWeight:700, marginBottom:6, color:color.ink }}>No active requests</div>
                   <div style={{ color:color.muted, fontSize:13 }}>Bids from guests appear here in real time.</div>
                 </div>
-              : liveBids.map(bid => {
+              : bidGroups.map(group => (
+                <div key={group.roomId} style={{ marginBottom:28 }}>
+                  {/* Room header — inventory + competing-bid count. When a room
+                      is sold out the hotel is warned but can still override. */}
+                  <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", marginBottom:10,
+                    padding:"10px 14px", borderRadius:8,
+                    background: group.inventory === 0 ? color.dangerSoft : color.surfaceAlt,
+                    border: `1px solid ${group.inventory === 0 ? color.danger : color.line}` }}>
+                    <span style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:15, color:color.ink }}>
+                      {group.roomName}
+                    </span>
+                    <span style={{ fontSize:13, fontWeight:600, color: group.inventory === 0 ? color.danger : color.success }}>
+                      {group.inventory === 0
+                        ? "SOLD OUT — accepting will oversell"
+                        : `${group.inventory} room${group.inventory === 1 ? "" : "s"} left`}
+                    </span>
+                    <span style={{ fontSize:13, color:color.muted }}>
+                      · {group.bids.length} {group.bids.length === 1 ? "bid" : "competing bids"}
+                      {group.bids.length > 1 && ` · highest $${group.bids[0].amount}`}
+                    </span>
+                  </div>
+                  {group.bids.map((bid, bidIdx) => {
+                  const isTopBid = group.bids.length > 1 && bidIdx === 0;
                   const t = Math.max(0, Math.round((new Date(bid.expiresAt).getTime() - now)/1000));
                   const room = rooms.find(r => r.id === bid.room.id);
                   const floor = room?.floor_price;
@@ -401,13 +481,15 @@ function HotelDashboard() {
                   const gStays = gp.stays || 0;
                   const gTrusted = gStays >= 10 && gRating >= 4.5;
                   return (
-                    <div key={bid.id} style={{ ...SL.bidCard, borderColor:aboveFloor?color.successSoft:color.danger, marginBottom:16 }}>
+                    <div key={bid.id} style={{ ...SL.bidCard, borderColor:aboveFloor?color.successSoft:color.danger, marginBottom:16,
+                      ...(isTopBid ? { borderColor:color.success, borderWidth:2 } : {}) }}>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
                         <div>
                           <div style={SL.bidRoom}>{bid.room.name} <span style={{ color:color.faint, fontWeight:400, fontSize:14 }}>· {bid.room.type}</span></div>
                           <div style={{ fontSize:12, color:color.faint, marginTop:2 }}>Ref: {bid.id.slice(0,8)}</div>
                           <div style={{ display:"flex", gap:8, alignItems:"center", marginTop:8, flexWrap:"wrap" }}>
                             <Badge status="pending" />
+                            {isTopBid && <span style={{ fontSize:11, background:color.successSoft, color:color.success, padding:"2px 8px", borderRadius:6, fontWeight:700 }}>Highest bid</span>}
                             {floor != null && (aboveFloor
                               ? <span style={{ fontSize:12, color:color.success, fontWeight:600 }}>✓ Above floor (${floor})</span>
                               : <span style={{ fontSize:12, color:color.danger, fontWeight:600 }}>✕ Below floor (${floor})</span>)}
@@ -446,7 +528,10 @@ function HotelDashboard() {
                         <TimerRing seconds={t} size={80} />
                         <div style={{ flex:1, display:"flex", flexDirection:"column", gap:10, minWidth:200 }}>
                           <div style={{ display:"flex", gap:10 }}>
-                            <button style={{ ...SL.decideBtn, background:color.success, color:color.surface, flex:1 }} onClick={()=>onDecide(bid.id,"accepted")}>Accept ${bid.amount}</button>
+                            <button style={{ ...SL.decideBtn, background: group.inventory === 0 ? color.danger : color.success, color:color.surface, flex:1 }}
+                              onClick={()=>onAccept(bid, group)}>
+                              {group.inventory === 0 ? `Accept anyway $${bid.amount}` : `Accept $${bid.amount}`}
+                            </button>
                             <button style={{ ...SL.decideBtn, background:color.surfaceAlt, color:color.ink, border:`1px solid ${color.line}`, flex:1 }} onClick={()=>onDecide(bid.id,"declined")}>Decline</button>
                           </div>
                           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
@@ -467,7 +552,9 @@ function HotelDashboard() {
                       </div>
                     </div>
                   );
-                })
+                  })}
+                </div>
+              ))
             }
           </div>
         )}

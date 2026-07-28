@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import * as api from "../lib/api";
-import { TIMER_SECONDS, COUNTER_TIMER, TAX_RATE, effectiveStatus, secondsLeft, getTodayKey } from "../lib/api";
+import { TIMER_SECONDS, COUNTER_TIMER, TAX_RATE, RESPONSE_LABEL, effectiveStatus, secondsLeft, getTodayKey } from "../lib/api";
 import {
   shortDate, stayWindow, useWindowWidth, MOBILE_BREAKPOINT,
   TimerRing, ImageOrIcon, Badge, StarDisplay, GuestProfileCard, PasswordLogin,
@@ -181,7 +181,7 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms }) {
   const steps = [
     ["1", "Browse available rooms tonight", "Real rooms hotels still have open tonight, listed with their standard rates."],
     ["2", "Name your price — private, one tap", "Your offer goes straight to the hotel. Nobody else ever sees it."],
-    ["3", "Hotel responds in 10 minutes. Accept or walk away.", "No card charged here. If accepted, you pay the hotel directly at check-in."],
+    ["3", `Hotel responds in ${RESPONSE_LABEL}. Accept or walk away.`, "No card charged here. If accepted, you pay the hotel directly at check-in."],
   ];
 
   return (
@@ -191,7 +191,7 @@ function HotelListingView({ onSelectHotel, hotelsWithRooms }) {
         <div style={SL.heroOverlay} />
         <div style={{ position:"relative", textAlign:"center", padding:"0 24px", maxWidth:820 }}>
           <h1 style={{ ...SL.heroTitle, fontSize: isMobile ? 36 : 52 }}>
-            Name your price. Hotels respond in 10 minutes.
+            Name your price. Hotels respond in {RESPONSE_LABEL}.
           </h1>
           <p style={SL.heroSub}>Bid on tonight&apos;s unsold rooms. No markups. No middleman pricing.</p>
           <button style={{ ...SL.heroCta, marginTop:34 }} onClick={() => scrollTo("available-now")}
@@ -490,6 +490,7 @@ function GuestView() {
   const [submitting, setSubmitting]       = useState(false);
   const [guestDate, setGuestDate]         = useState(getTodayKey());
   const [agreeTerms, setAgreeTerms]       = useState(false);
+  const [confirmOpen, setConfirmOpen]     = useState(false); // final double-check modal
   const [now, setNow]                     = useState(Date.now());
   const [savedHotelIds, setSavedHotelIds] = useState(new Set()); // hotel_ids the guest has saved
   const [hotelAccount, setHotelAccount]   = useState(null); // set when the signed-in user owns a hotel
@@ -649,22 +650,15 @@ function GuestView() {
     });
   }, [bids]);
 
-  async function handleCancel(id) {
-    if (!id) return;
-    if (typeof window !== "undefined" && !window.confirm("Cancel this rate request? This can't be undone.")) return;
-    try {
-      await api.cancelRequest(id);
-      refreshBids();
-    } catch (e) { console.error(e); }
-  }
-
   async function handleBid() {
     if (!currentGuest) { setScreen("login"); return; }
     const amount = Math.round(Number(bidAmount));
     if (!amount || amount < 1) return;
-    // Defensive: prevent a second open request at the same hotel.
-    if (myLive.some(b => b.hotel?.id === selectedHotel?.id)) {
-      alert("You already have an open request at this hotel. Cancel it before submitting a new one.");
+    // One active request per ACCOUNT (mirrors trg_enforce_one_open_request in
+    // the DB). There is no cancel — the window is short enough to just wait.
+    if (myLive.length > 0) {
+      setConfirmOpen(false);
+      alert("You already have an active request. Wait for it to resolve before submitting another.");
       return;
     }
     setSubmitting(true);
@@ -672,12 +666,19 @@ function GuestView() {
       const bid = await api.submitBid({ hotelId: selectedHotel.id, roomId: selectedRoom.id, guestId: currentGuest.id, amount });
       bid.hotel = { id: selectedHotel.id, name: selectedHotel.name };
       bid.room  = { id: selectedRoom.id, name: selectedRoom.name, type: selectedRoom.type, rack: selectedRoom.rack };
+      setConfirmOpen(false);
       setActiveBid(bid);
       refreshBids();
       if (bid.status === "declined") { setScreen("result"); }
       else { setTimeLeft(secondsLeft(bid)); setScreen("waiting"); }
       setSideTab("live");
-    } catch (e) { console.error(e); alert("Could not submit your request. Please try again."); }
+    } catch (e) {
+      console.error(e);
+      setConfirmOpen(false);
+      // Surface the DB trigger's message (e.g. the one-active-request rule)
+      // rather than a generic failure, so a server-side rejection reads sensibly.
+      alert(e?.message || "Could not submit your request. Please try again.");
+    }
     finally { setSubmitting(false); }
   }
 
@@ -767,12 +768,14 @@ function GuestView() {
       const fromPrice = Math.min(...selectedHotel.rooms.map(r=>r.rack));
       const galleryThumbs = selectedHotel.rooms.map(r=>r.imageUrl).filter(Boolean).slice(0,4);
       const allAmenities = [...new Set(selectedHotel.rooms.flatMap(r=>r.amenities||[]))];
-      // Guest can only have one open request per hotel.
-      const pendingHere = myLive.find(b => b.hotel?.id === selectedHotel.id) || null;
+      // One active request per ACCOUNT — an open bid anywhere blocks bidding
+      // everywhere until it resolves (mirrors trg_enforce_one_open_request).
+      const pendingHere = myLive[0] || null;
+      const pendingIsHere = pendingHere?.hotel?.id === selectedHotel.id;
       const facts = [
         ["🛏", `${selectedHotel.rooms.length} room type${selectedHotel.rooms.length>1?"s":""}`],
         ["💵", `From $${fromPrice}`],
-        ["⏱", "10-min response"],
+        ["⏱", `${RESPONSE_LABEL} response`],
         ["🌙", "Tonight only"],
       ];
       const safety = ["Daily cleaning","Disinfection & sterilization","Fire extinguishers","Smoke detectors"];
@@ -852,14 +855,15 @@ function GuestView() {
             {pendingHere && (
               <div style={{ ...SL.panel, padding:"12px 14px", marginBottom:14, background:color.brandSoft, borderColor:color.brand, display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, flexWrap:"wrap" }}>
                 <div style={{ fontSize:13, color:color.brandText }}>
-                  You already have a {effectiveStatus(pendingHere) === "countered" ? "counter offer" : "pending request"} at this hotel — only one at a time.
+                  You have an active {effectiveStatus(pendingHere) === "countered" ? "counter offer" : "request"}
+                  {pendingIsHere ? " at this hotel" : ` at ${pendingHere.hotel?.name}`} — one at a time.
                 </div>
                 <button style={{ ...SL.ghostBtn, padding:"7px 12px", fontSize:12 }} onClick={()=>setSideTab("live")}>View Live Requests</button>
               </div>
             )}
             <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
               {selectedHotel.rooms.map(room => {
-                const isPendingRoom = pendingHere && pendingHere.room?.id === room.id;
+                const isPendingRoom = pendingHere && pendingIsHere && pendingHere.room?.id === room.id;
                 const blocked = !!pendingHere;
                 return (
                 <div key={room.id} style={{ ...SL.card, cursor:"default", display:"flex", flexWrap:"wrap", opacity: blocked && !isPendingRoom ? 0.55 : 1 }}>
@@ -881,7 +885,7 @@ function GuestView() {
                     </div>
                     {blocked
                       ? <button style={{ ...SL.primaryBtn, background:color.line, color:color.faint, cursor:"not-allowed" }} disabled>
-                          {isPendingRoom ? "Request in progress" : "Request locked — 1 per hotel"}
+                          {isPendingRoom ? "Request in progress" : "Locked — 1 active request at a time"}
                         </button>
                       : <button style={SL.primaryBtn} onClick={() => { setSelectedRoom(room); setScreen("bid"); }}>Request a Rate →</button>
                     }
@@ -895,7 +899,7 @@ function GuestView() {
             <div style={{ marginTop:28 }}>
               <h3 style={{ ...SL.h1, fontSize:18, marginBottom:8 }}>About this stay</h3>
               <p style={{ color:SL.sub, fontSize:14, lineHeight:1.7, margin:0 }}>
-                {selectedHotel.tagline ? selectedHotel.tagline + ". " : ""}{selectedHotel.name} releases unsold rooms tonight at guest-named rates in {selectedHotel.city || selectedHotel.location}. Submit a private rate request and the hotel responds within 10 minutes.
+                {selectedHotel.tagline ? selectedHotel.tagline + ". " : ""}{selectedHotel.name} releases unsold rooms tonight at guest-named rates in {selectedHotel.city || selectedHotel.location}. Submit a private rate request and the hotel responds within {RESPONSE_LABEL}.
               </p>
             </div>
 
@@ -982,12 +986,12 @@ function GuestView() {
                 </div>
               )}
               <div style={{ marginTop:14, fontSize:12, color:SL.sub, lineHeight:1.6 }}>
-                Pick a room and name your nightly rate — the hotel responds within 10 minutes.
+                Pick a room and name your nightly rate — the hotel responds within {RESPONSE_LABEL}.
               </div>
             </div>
             <div style={{ ...SL.panel, padding:18, marginTop:14 }}>
               <div style={{ fontSize:11, color:SL.faint, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginBottom:12 }}>How it works</div>
-              {[["1","Name your rate","Offer what you'd pay tonight."],["2","Fast answer","Accept, decline or counter in ~10 min."],["3","Show your code","Give the confirmation code at check-in."]].map(([n,t,d]) => (
+              {[["1","Name your rate","Offer what you'd pay tonight."],["2","Fast answer",`Accept, decline or counter in ~${RESPONSE_LABEL}.`],["3","Show your code","Give the confirmation code at check-in."]].map(([n,t,d]) => (
                 <div key={n} style={{ display:"flex", gap:10, marginBottom:12 }}>
                   <div style={{ width:24, height:24, borderRadius:"50%", background:color.brandSoft, color:color.brandText, fontWeight:700, fontSize:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{n}</div>
                   <div>
@@ -1028,7 +1032,7 @@ function GuestView() {
         </div>
         <div style={{ ...SL.panel, padding:20 }}>
           <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:18, marginBottom:6 }}>Your Rate Request</div>
-          <div style={{ fontSize:13, color:SL.sub, marginBottom:8, lineHeight:1.55 }}>Rack rate is ${selectedRoom.rack}. The hotel will respond within 10 minutes.</div>
+          <div style={{ fontSize:13, color:SL.sub, marginBottom:8, lineHeight:1.55 }}>Rack rate is ${selectedRoom.rack}. The hotel will respond within {RESPONSE_LABEL}.</div>
           <div style={{ fontSize:12, color:SL.sub, marginBottom:14 }}>📅 Tonight · {stayWindow(getTodayKey())}</div>
           <div style={{ display:"flex", alignItems:"baseline", gap:8, borderBottom:`2px solid ${color.brand}`, paddingBottom:12, marginBottom:18 }}>
             <span style={{ fontFamily:"Space Grotesk,sans-serif", fontSize:26, fontWeight:700, color:color.brand }}>$</span>
@@ -1116,9 +1120,37 @@ function GuestView() {
             <span>I understand this is a private rate request, not a guaranteed booking. If accepted, I'll pay the hotel directly at check-in and agree to LastKey's terms and cancellation policy.</span>
           </label>
 
-          <button style={{ ...SL.primaryBtn, opacity:(!agreeTerms||submitting)?0.4:1 }} disabled={!agreeTerms||submitting} onClick={handleBid}>
+          <button style={{ ...SL.primaryBtn, opacity:(!agreeTerms||submitting)?0.4:1 }} disabled={!agreeTerms||submitting}
+            onClick={() => setConfirmOpen(true)}>
             {submitting ? "Submitting…" : "Confirm & Submit Request"}
           </button>
+
+          {/* Final double-check. The offer is binding for the response window
+              and there is no cancel, so this is the guest's last exit. */}
+          {confirmOpen && (
+            <div style={SL.modalOverlay} onClick={() => { if (!submitting) setConfirmOpen(false); }}>
+              <div style={SL.modalPanel} onClick={e => e.stopPropagation()}>
+                <h2 style={{ ...SL.h1, fontSize:20, marginBottom:10 }}>Submit a ${rate} offer?</h2>
+                <p style={{ fontSize:14, color:SL.sub, lineHeight:1.65, margin:"0 0 6px" }}>
+                  If <strong style={{ color:SL.ink }}>{selectedHotel?.name}</strong> accepts, you are committed to
+                  this stay at ${rate} per night. This cannot be cancelled.
+                </p>
+                <p style={{ fontSize:14, color:SL.sub, lineHeight:1.65, margin:"0 0 20px" }}>
+                  The hotel has {RESPONSE_LABEL} to respond.
+                </p>
+                <div style={{ display:"flex", gap:10 }}>
+                  <button style={{ ...SL.ghostBtn, flex:1, padding:"12px 0" }} disabled={submitting}
+                    onClick={() => setConfirmOpen(false)}>
+                    Go back
+                  </button>
+                  <button style={{ ...SL.primaryBtn, flex:1, opacity:submitting?0.4:1 }} disabled={submitting}
+                    onClick={handleBid}>
+                    {submitting ? "Sending…" : `Yes, send $${rate}`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -1281,10 +1313,9 @@ function GuestView() {
                   </button>
                 )}
                 {b.status === "pending" && (
-                  <button style={{ ...SL.ghostBtn, flex:1, padding:"11px 0", fontSize:13, color:color.danger, borderColor:color.danger }}
-                    onClick={()=>handleCancel(b.id)}>
-                    Cancel Request
-                  </button>
+                  <div style={{ flex:1, padding:"11px 0", fontSize:13, color:SL.sub, textAlign:"center" }}>
+                    Waiting on the hotel — {RESPONSE_LABEL} to respond.
+                  </div>
                 )}
               </div>
             </div>
