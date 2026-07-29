@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
 import * as api from "../lib/api";
-import { effectiveStatus, getTodayKey } from "../lib/api";
+import { effectiveStatus, getTodayKey, COUNTER_TIMER } from "../lib/api";
 import {
   shortDate, useWindowWidth, MOBILE_BREAKPOINT, BOTTOM_NAV_HEIGHT,
   TimerRing, ImageOrIcon, Badge, StarDisplay, GuestProfileCard, PasswordLogin,
@@ -317,6 +317,19 @@ function HotelDashboard() {
   // Rooms that are sold out but still receiving bids — the hotel needs to know.
   const soldOutWithBids = bidGroups.filter(g => g.inventory === 0);
 
+  // Missed bids: lapsed tonight-requests the hotel can still recover by
+  // countering (which restamps a fresh guest window). Filter on effectiveStatus
+  // rather than raw status — the row reads 'pending' until the daily cleaner
+  // flips it to 'expired', and both should appear here. Capped to the last two
+  // hours so this stays a worklist, not a graveyard.
+  const MISSED_WINDOW_MS = 2 * 60 * 60 * 1000;
+  const missedBids = bids
+    .filter(b =>
+      effectiveStatus(b) === "expired" &&
+      b.stayDate === getTodayKey() &&
+      b.expiresAt && (now - new Date(b.expiresAt).getTime()) < MISSED_WINDOW_MS)
+    .sort((a, b) => new Date(b.expiresAt) - new Date(a.expiresAt));
+
   const accepted = bids.filter(b => ["accepted","handled"].includes(b.status));
   // "Tonight" stats are scoped to the current 6 AM-boundary booking day.
   const todayKey = getTodayKey();
@@ -561,6 +574,62 @@ function HotelDashboard() {
                 </div>
               ))
             }
+
+            {/* Missed bids — lapsed tonight-requests the hotel can still
+                recover. Countering restamps a fresh window, so the guest has
+                to accept again; the hotel can never book them unilaterally. */}
+            {missedBids.length > 0 && (
+              <div style={{ marginTop:32 }}>
+                <div style={{ ...SL.dashSectionHead, marginBottom:12 }}>
+                  <h2 style={{ ...SL.dashTitle, fontSize:18 }}>Missed bids</h2>
+                  <span style={{ color:color.muted, fontSize:13 }}>
+                    These expired before anyone responded. Counter at the guest&apos;s price to put it back in play —
+                    they get a fresh {Math.round(COUNTER_TIMER)}-second window and must accept again.
+                  </span>
+                </div>
+                {missedBids.map(bid => {
+                  const mins = Math.max(1, Math.round((now - new Date(bid.expiresAt).getTime())/60000));
+                  const cv = counterInputs[bid.id] ?? "";
+                  const amt = Math.round(Number(cv || bid.amount));
+                  const gp = guestStats[bid.guest?.email] || bid.guest || {};
+                  const gRating = Number(gp.rating || 0);
+                  const gStays = gp.stays || 0;
+                  return (
+                    <div key={bid.id} style={{ ...SL.bidCard, borderColor:color.line, marginBottom:12, opacity:0.92 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap" }}>
+                        <div>
+                          <div style={SL.bidRoom}>{bid.room?.name} <span style={{ color:color.faint, fontWeight:400, fontSize:14 }}>· {bid.room?.type}</span></div>
+                          <div style={{ display:"flex", gap:8, alignItems:"center", marginTop:6, flexWrap:"wrap" }}>
+                            <Badge status="expired" />
+                            <span style={{ fontSize:12, color:color.muted }}>expired {mins} min ago</span>
+                            {gRating > 0 && <><StarDisplay rating={gRating} /><span style={{ fontSize:12, color:color.ink, fontWeight:700 }}>{gRating.toFixed(1)}</span></>}
+                            <span style={{ fontSize:12, color:color.muted }}>{gStays === 0 ? "New guest" : `${gStays} stay${gStays === 1 ? "" : "s"}`}</span>
+                          </div>
+                        </div>
+                        <div style={{ textAlign:"right" }}>
+                          <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:24, color:color.muted }}>${bid.amount}</div>
+                          <div style={{ fontSize:12, color:color.faint }}>Rack: ${bid.room?.rack}</div>
+                        </div>
+                      </div>
+                      <div style={{ display:"flex", gap:8, alignItems:"center", marginTop:14, paddingTop:14, borderTop:`1px solid ${color.line}`, flexWrap:"wrap" }}>
+                        <span style={{ fontSize:12, color:color.muted, fontWeight:600, flexShrink:0 }}>Counter at</span>
+                        <div style={{ display:"flex", alignItems:"center", background:color.surface, border:`1px solid ${color.line}`, borderRadius:8, padding:"0 10px", width:120 }}>
+                          <span style={{ color:color.faint }}>$</span>
+                          <input type="number" placeholder={String(bid.amount)} value={cv}
+                            onChange={e=>setCounterInputs(p=>({...p,[bid.id]:e.target.value}))}
+                            style={{ background:"none", border:"none", outline:"none", color:color.ink, fontSize:15, fontWeight:700, fontFamily:"Space Grotesk,sans-serif", width:"100%", padding:"8px 6px" }} />
+                        </div>
+                        <button style={{ ...SL.decideBtn, background:color.counter, color:color.surface, padding:"10px 16px", flexShrink:0, opacity: amt > 0 ? 1 : 0.4 }}
+                          disabled={!(amt > 0)}
+                          onClick={()=>{ if (!(amt > 0)) return; onCounter(bid.id, amt); setCounterInputs(p=>({...p,[bid.id]:""})); }}>
+                          Counter at ${amt || bid.amount}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
