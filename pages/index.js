@@ -671,7 +671,12 @@ function GuestView() {
       refreshBids();
       if (bid.status === "declined") { setScreen("result"); }
       else { setTimeLeft(secondsLeft(bid)); setScreen("waiting"); }
-      setSideTab("live");
+      // Must stay on a non-panel tab: showPanel (sideTab in live/history/saved)
+      // renders renderSideContent() INSTEAD of renderMain(), which would swallow
+      // the waiting/result screen we just set. Selecting "live" here previously
+      // meant an auto-declined bid never showed its "Not this time" screen — the
+      // guest landed on an empty Live Requests panel instead.
+      setSideTab("browse");
     } catch (e) {
       console.error(e);
       setConfirmOpen(false);

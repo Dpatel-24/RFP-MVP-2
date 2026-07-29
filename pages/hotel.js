@@ -298,7 +298,10 @@ function HotelDashboard() {
           roomId: id,
           roomName: b.room?.name || "Room",
           roomType: b.room?.type || "",
-          inventory: room?.inventoryCount ?? 0,
+          // null = inventory unknown (rooms not loaded yet, or the room was
+          // removed). Only a known 0 may trigger the oversell warning —
+          // otherwise every group would falsely read SOLD OUT on first paint.
+          inventory: room ? (room.inventoryCount ?? 0) : null,
           floor: room?.floor_price,
           bids: [],
         };
@@ -457,10 +460,12 @@ function HotelDashboard() {
                     <span style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:15, color:color.ink }}>
                       {group.roomName}
                     </span>
-                    <span style={{ fontSize:13, fontWeight:600, color: group.inventory === 0 ? color.danger : color.success }}>
+                    <span style={{ fontSize:13, fontWeight:600, color: group.inventory === 0 ? color.danger : group.inventory == null ? color.muted : color.success }}>
                       {group.inventory === 0
                         ? "SOLD OUT — accepting will oversell"
-                        : `${group.inventory} room${group.inventory === 1 ? "" : "s"} left`}
+                        : group.inventory == null
+                          ? "inventory unavailable"
+                          : `${group.inventory} room${group.inventory === 1 ? "" : "s"} left`}
                     </span>
                     <span style={{ fontSize:13, color:color.muted }}>
                       · {group.bids.length} {group.bids.length === 1 ? "bid" : "competing bids"}
